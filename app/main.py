@@ -464,10 +464,12 @@ async def get_vendors(site_id: str | None = Query(None), user: dict = Depends(ge
 
 @app.get("/api/items")
 async def get_item_master():
-    from app.item_master import UNITS, LEDGER_TYPES, PAYMENT_MODES
-    categories = sheets_service.get_items_grouped()
-    if not categories:
-        from app.item_master import ITEM_CATEGORIES
+    from app.item_master import UNITS, LEDGER_TYPES, PAYMENT_MODES, ITEM_CATEGORIES
+    try:
+        categories = sheets_service.get_items_grouped()
+        if not categories:
+            categories = ITEM_CATEGORIES
+    except Exception:
         categories = ITEM_CATEGORIES
     return {
         "categories": categories,
@@ -479,7 +481,10 @@ async def get_item_master():
 
 @app.get("/api/items/all")
 async def get_all_items(user: dict = Depends(get_current_user)):
-    return sheets_service.list_items()
+    try:
+        return sheets_service.list_items()
+    except Exception:
+        return []
 
 
 @app.post("/api/items")
@@ -492,8 +497,12 @@ async def add_item(
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  FRONTEND — serve the PWA
+#  HEALTH CHECK & FRONTEND
 # ═══════════════════════════════════════════════════════════════════
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_app():
