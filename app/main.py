@@ -528,14 +528,21 @@ async def serve_app():
 @app.get("/manifest.json")
 async def manifest():
     return {
-        "name": "Welkin Builders - Cash Tracker",
+        "id": "/",
+        "name": "Welkin Builders Infrastructure Ltd - Cash Tracker",
         "short_name": "Welkin Cash",
+        "description": "Daily cash entry tracker for construction project sites. Record vendor payments, track expenses, and reconcile funds.",
         "start_url": "/",
+        "scope": "/",
         "display": "standalone",
+        "orientation": "portrait",
         "background_color": "#0b3d5c",
         "theme_color": "#0b3d5c",
+        "lang": "en",
+        "dir": "ltr",
+        "categories": ["business", "finance", "productivity"],
         "icons": [
-            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
-            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
         ],
     }
