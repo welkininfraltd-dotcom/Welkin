@@ -1,0 +1,44 @@
+Welkin Cash Tracker — Built by Welkin Builders Infrastructure Ltd
+
+The smart way to manage daily cash expenses across your construction project sites. Designed for construction companies managing government road and infrastructure projects.
+
+KEY FEATURES:
+
+📝 Quick Cash Entry
+Record vendor payments instantly — date, vendor, item, quantity, rate, amount. Auto-calculates totals. Capture invoice photos directly from your phone camera.
+
+📦 Standardized Item Master
+100+ construction items with local Hindi names mapped to standard names. No more confusion when different workers use different words for the same material (Bali → Bamboo Pole, Sariya → TMT Steel, Favda → Shovel).
+
+👑 Admin Dashboard
+Company owners can create project sites, assign site engineers, release funds, and track spending across all sites from one screen.
+
+💰 Fund Tracking & Reconciliation
+Track money given to each site engineer vs money spent. See balance per site, per engineer — daily, weekly, monthly, yearly.
+
+✅ Entry Approval
+Site engineer entries go through admin approval. Admin entries are auto-approved. Full audit trail in Google Sheets.
+
+📊 Spending Analytics
+Category-wise spending breakdown, top vendors, site-wise comparison. Filter by date range — this week, month, year, or custom dates.
+
+🏪 Vendor & Item Management
+Maintain vendor master with multi-site assignment. Add, edit, and search vendors and items. Fuzzy search finds items even with spelling variations.
+
+👥 Multi-Site, Multi-User
+Each project site has its own data sheet. Site engineers can be assigned to multiple sites. Role-based access — admin sees everything, engineers see their own entries.
+
+🔔 Notifications
+Admin gets notified on new entries. Engineers get notified on fund releases and entry approvals.
+
+☁️ Google Sheets Backend
+All data syncs to Google Sheets — your accountant can access it directly for Tally entry. No separate database needed.
+
+BUILT FOR:
+• Construction company owners
+• Site engineers and supervisors
+• Project managers
+• Accounts teams
+
+By Welkin Builders Infrastructure Ltd
+Indore, Madhya Pradesh
