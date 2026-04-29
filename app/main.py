@@ -37,18 +37,23 @@ if STATIC_DIR.exists():
 @app.on_event("startup")
 async def startup_event():
     """Create the default admin user if it does not exist yet."""
-    try:
-        existing = sheets_service.find_user(settings.admin_mobile)
-        if not existing:
-            sheets_service.create_user(
-                mobile=settings.admin_mobile,
-                name=settings.admin_name,
-                password_hash=hash_password("admin123"),
-                role=Role.admin,
-            )
-            logger.info("Default admin created: %s", settings.admin_mobile)
-    except Exception as e:
-        logger.warning("Could not initialise admin user (Sheets may not be configured): %s", e)
+    import asyncio
+    for attempt in range(3):
+        try:
+            existing = sheets_service.find_user(settings.admin_mobile)
+            if not existing:
+                sheets_service.create_user(
+                    mobile=settings.admin_mobile,
+                    name=settings.admin_name,
+                    password_hash=hash_password("admin123"),
+                    role=Role.admin,
+                )
+                logger.info("Default admin created: %s", settings.admin_mobile)
+            return
+        except Exception as e:
+            logger.warning("Startup attempt %d failed: %s", attempt + 1, e)
+            await asyncio.sleep(2)
+    logger.warning("Could not initialise admin user after 3 attempts")
 
 
 # ═══════════════════════════════════════════════════════════════════
