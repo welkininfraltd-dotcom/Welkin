@@ -264,3 +264,7 @@ body {
 @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
 .splash-title { font-size: 1.2em; font-weight: 700; }
 .splash-sub { font-size: .75em; opacity: .7; margin-top: 4px; }
+
+/* ── Prevent URL bar on Android ── */
+html, body { overscroll-behavior: none; }
+select:focus, input:focus { scroll-margin-top: 100px; }

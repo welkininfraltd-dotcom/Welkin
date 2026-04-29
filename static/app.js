@@ -233,47 +233,41 @@ async function loadEntryForm() {
       <div class="fg"><label>Remarks</label><textarea id="e-remarks" rows="2" placeholder="Optional notes..."></textarea></div>
       <button class="btn btn-primary" onclick="submitEntry()">💾 Save Entry</button>
     </div>`;
-  // Load vendors into dropdown
+  // Load vendors into select dropdown (grouped by category)
   try {
     const vendors = await api("/api/vendors");
-    window._vendors = vendors;
-    const dl = document.getElementById("party-list");
-    if (dl) {
-      dl.innerHTML = vendors.map(v => `<option value="${v.name}">`).join("");
+    const sel = document.getElementById("e-party");
+    if (sel) {
+      const groups = {};
+      for (const v of vendors) {
+        const cat = v.category || "General";
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(v);
+      }
+      let html = '<option value="">-- Select Vendor --</option>';
+      html += '<option value="__new__">+ Add New Vendor</option>';
+      for (const [cat, vlist] of Object.entries(groups)) {
+        html += `<optgroup label="${cat}">`;
+        for (const v of vlist) html += `<option value="${v.name}">${v.name}</option>`;
+        html += '</optgroup>';
+      }
+      sel.innerHTML = html;
     }
-    showVendorSuggestions();
   } catch (e) { console.warn("Vendor load failed", e); }
 }
 
-function showVendorSuggestions() {
-  const dd = document.getElementById("vendor-dropdown");
-  if (!dd || !window._vendors) return;
-  const q = (document.getElementById("e-party")?.value || "").toLowerCase();
-  const filtered = window._vendors.filter(v => !q || v.name.toLowerCase().includes(q));
-  if (filtered.length === 0 && !q) { dd.style.display = "none"; return; }
-  let html = '<div style="padding:8px 10px;font-size:.78em;color:var(--primary);font-weight:700;cursor:pointer;border-bottom:1px solid #eee" onclick="selectVendor(\'+ Add New Vendor\')">+ Add New Vendor</div>';
-  for (const v of filtered.slice(0, 30)) {
-    html += `<div style="padding:8px 10px;font-size:.82em;cursor:pointer;border-bottom:1px solid #f5f5f5" onclick="selectVendor('${v.name.replace(/'/g, "\\'")}')" onmousedown="event.preventDefault()">${v.name} <span style="color:#999;font-size:.8em">${v.category || ''}</span></div>`;
+function onVendorChange() {
+  const sel = document.getElementById("e-party");
+  if (sel && sel.value === "__new__") {
+    const name = prompt("Enter new vendor name:");
+    if (name) {
+      const opt = document.createElement("option");
+      opt.value = name; opt.textContent = name;
+      sel.appendChild(opt);
+      sel.value = name;
+    } else { sel.value = ""; }
   }
-  if (filtered.length > 30) html += `<div style="padding:6px 10px;font-size:.7em;color:#999">+${filtered.length - 30} more — type to filter</div>`;
-  dd.innerHTML = html;
-  dd.style.display = "block";
 }
-
-function filterVendorSuggestions() { showVendorSuggestions(); }
-
-function selectVendor(name) {
-  document.getElementById("e-party").value = name;
-  document.getElementById("vendor-dropdown").style.display = "none";
-}
-
-// Hide dropdown when clicking outside
-document.addEventListener("click", (e) => {
-  const dd = document.getElementById("vendor-dropdown");
-  if (dd && !e.target.closest("#e-party") && !e.target.closest("#vendor-dropdown")) {
-    dd.style.display = "none";
-  }
-});
 
 function onItemChange() {
   const sel = document.getElementById("e-item");
