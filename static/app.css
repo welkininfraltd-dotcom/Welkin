@@ -202,3 +202,65 @@ body {
   transition: .25s; box-shadow: 0 1px 3px rgba(0,0,0,.2);
 }
 .switch.on::after { left: 22px; }
+
+/* ── Loading spinner ── */
+.loader {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 40px 20px; color: var(--text-light);
+}
+.spinner {
+  width: 36px; height: 36px; border: 3px solid var(--border);
+  border-top-color: var(--primary-light); border-radius: 50%;
+  animation: spin .7s linear infinite; margin-bottom: 10px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loader-text { font-size: .8em; }
+
+/* ── Screen fade-in ── */
+.screen.active { animation: fadeIn .25s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ── Card slide-up on load ── */
+.card { animation: slideUp .3s ease; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* ── Skeleton loading placeholder ── */
+.skeleton {
+  background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%);
+  background-size: 200% 100%; animation: shimmer 1.2s infinite;
+  border-radius: 8px; height: 14px; margin-bottom: 8px;
+}
+.skeleton.h { height: 24px; width: 60%; margin-bottom: 12px; }
+.skeleton.bar { height: 44px; border-radius: 10px; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ── Button press animation ── */
+.btn:active { transform: scale(.97); }
+
+/* ── Toast slide-up ── */
+.toast { animation: toastIn .3s ease; }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* ── Login card bounce ── */
+.login-card { animation: bounceIn .4s ease; }
+@keyframes bounceIn { 0% { opacity: 0; transform: scale(.9); } 70% { transform: scale(1.02); } 100% { opacity: 1; transform: scale(1); } }
+
+/* ── Chip tap ── */
+.chip:active { transform: scale(.93); }
+
+/* ── Entry row hover/tap ── */
+.entry-row { transition: background .15s; }
+.entry-row:active { background: #f5f8ff; }
+
+/* ── Splash screen ── */
+.splash {
+  position: fixed; inset: 0; z-index: 100;
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff; transition: opacity .4s;
+}
+.splash.hide { opacity: 0; pointer-events: none; }
+.splash-icon { font-size: 3em; margin-bottom: 10px; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+.splash-title { font-size: 1.2em; font-weight: 700; }
+.splash-sub { font-size: .75em; opacity: .7; margin-top: 4px; }

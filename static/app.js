@@ -129,6 +129,22 @@ function toast(msg, isError = false) {
   setTimeout(() => { t.style.display = "none"; }, 2500);
 }
 
+// ── Loading skeleton ──────────────────────────────────────────────
+function showLoading(el) {
+  if (typeof el === "string") el = document.getElementById(el);
+  if (!el) return;
+  el.innerHTML = `<div class="loader"><div class="spinner"></div><div class="loader-text">Loading...</div></div>`;
+}
+
+function showSkeleton(el, rows = 4) {
+  if (typeof el === "string") el = document.getElementById(el);
+  if (!el) return;
+  let html = '<div class="card"><div class="skeleton h"></div>';
+  for (let i = 0; i < rows; i++) html += '<div class="skeleton bar" style="animation-delay:' + (i*0.1) + 's"></div><div style="height:8px"></div>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 // ── Item Master ───────────────────────────────────────────────────
 async function loadItemMaster() {
   if (ITEMS) return;
@@ -318,7 +334,7 @@ async function loadHistory(statusFilter) {
   const s = document.getElementById("screen-history");
   if (!CURRENT_SITE) { s.innerHTML = '<div class="card"><p>No site assigned</p></div>'; return; }
 
-  s.innerHTML = '<div class="card"><p>Loading...</p></div>';
+  showSkeleton(s, 5);
   try {
     let url = `/api/entries/${CURRENT_SITE}`;
     if (statusFilter) url += `?status=${statusFilter}`;
@@ -371,7 +387,7 @@ let SUMMARY_TO = "";
 async function loadSummary() {
   const s = document.getElementById("screen-summary");
   const isAdmin = USER && (USER.role === "admin" || USER.role === "Role.admin");
-  s.innerHTML = '<div class="card"><p>Loading summary...</p></div>';
+  s.innerHTML = '<div class="loader"><div class="spinner"></div><div class="loader-text">Loading summary...</div></div>';
 
   try {
     const sites = await api("/api/sites");
@@ -1151,4 +1167,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (isLoggedIn()) showApp();
   else showLogin();
+  // Hide splash after a short delay
+  setTimeout(() => {
+    const splash = document.getElementById("splash");
+    if (splash) { splash.classList.add("hide"); setTimeout(() => splash.remove(), 500); }
+  }, 800);
 });
