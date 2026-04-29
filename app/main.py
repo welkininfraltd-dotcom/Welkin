@@ -62,8 +62,13 @@ async def startup_event():
 
 @app.post("/api/auth/login", response_model=Token)
 async def login(body: UserLogin):
-    user = sheets_service.find_user(body.mobile)
-    if not user or not verify_password(body.password, user["password_hash"]):
+    try:
+        user = sheets_service.find_user(body.mobile)
+    except Exception as e:
+        logger.error("Login sheets error: %s", e)
+        raise HTTPException(status_code=503, detail=f"Service temporarily unavailable: {e}")
+
+    if not user or not verify_password(body.password, user.get("password_hash", "")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid mobile or password")
 
     # Resolve site names from comma-separated site_ids
@@ -71,9 +76,12 @@ async def login(body: UserLogin):
     site_id_list = [s.strip() for s in raw_sites.split(",") if s.strip()]
     site_names = []
     for sid in site_id_list:
-        site = sheets_service.find_site(sid)
-        if site:
-            site_names.append(site["name"])
+        try:
+            site = sheets_service.find_site(sid)
+            if site:
+                site_names.append(site["name"])
+        except Exception:
+            pass
 
     mobile_str = str(user["mobile"])
     token = create_access_token({"sub": mobile_str, "role": user["role"], "name": user["name"],
