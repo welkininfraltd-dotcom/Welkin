@@ -10,8 +10,10 @@ Sheet layout per site (matches the original Invoice.xlsx):
 from __future__ import annotations
 
 import logging
+import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 import gspread
@@ -68,13 +70,45 @@ _client: gspread.Client | None = None
 _client_ts: float = 0
 
 
+_creds_file: str | None = None
+
+
+def _resolve_credentials_path() -> str:
+    """Return a valid file path to the credentials JSON.
+    Handles the case where the path is actually the JSON content itself."""
+    global _creds_file
+    if _creds_file and Path(_creds_file).exists():
+        return _creds_file
+
+    import json as _json
+    import tempfile
+
+    path = settings.google_credentials_path
+    # Check if the "path" is actually JSON content
+    if path.strip().startswith("{"):
+        tmp = Path(tempfile.gettempdir()) / "gcp_creds.json"
+        tmp.write_text(path)
+        _creds_file = str(tmp)
+        return _creds_file
+
+    # Check the dedicated JSON env var
+    json_str = settings.google_credentials_json or os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
+    if json_str.strip().startswith("{"):
+        tmp = Path(tempfile.gettempdir()) / "gcp_creds.json"
+        tmp.write_text(json_str)
+        _creds_file = str(tmp)
+        return _creds_file
+
+    _creds_file = path
+    return path
+
+
 def _get_client() -> gspread.Client:
     global _client, _client_ts
     if _client and time.time() - _client_ts < 300:
         return _client
-    creds = Credentials.from_service_account_file(
-        settings.google_credentials_path, scopes=SCOPES,
-    )
+    creds_path = _resolve_credentials_path()
+    creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
     _client = gspread.authorize(creds)
     _client_ts = time.time()
     return _client
