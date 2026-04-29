@@ -200,9 +200,7 @@ async function loadEntryForm() {
         <div class="fg"><label>Bill / Challan No.</label><input id="e-bill" placeholder="SB-68 or Nil" value="Nil"></div>
       </div>
       <div class="fg"><label>Party / Vendor</label>
-        <input id="e-party" list="party-list" placeholder="Type to search vendors..." autocomplete="off" onfocus="showVendorSuggestions()" oninput="filterVendorSuggestions()">
-        <datalist id="party-list"></datalist>
-        <div id="vendor-dropdown" style="display:none;max-height:180px;overflow-y:auto;border:1.5px solid var(--border);border-radius:0 0 8px 8px;background:#fff;margin-top:-2px"></div>
+        <select id="e-party" onchange="onVendorChange()"><option value="">Loading vendors...</option></select>
       </div>
       <div class="fg"><label>📦 Item / Material</label>
         <select id="e-item" onchange="onItemChange()">${buildItemOptions()}</select>
