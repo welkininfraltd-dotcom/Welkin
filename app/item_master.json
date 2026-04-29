@@ -1,0 +1,115 @@
+{
+  "categories": [
+    {
+      "name": "Cement & Concrete",
+      "items": [
+        {
+          "standard_name": "Cement (OPC 53 Grade)",
+          "aliases": ["Cement", "Cement Bag", "cement bag", "Cement bag"],
+          "default_unit": "Bag",
+          "category": "Material"
+        },
+        {
+          "standard_name": "Cement Bricks",
+          "aliases": ["Cement Bricks"],
+          "default_unit": "No.",
+          "category": "Material"
+        },
+        {
+          "standard_name": "Bricks (Red)",
+          "aliases": ["Bricks"],
+          "default_unit": "No.",
+          "category": "Material"
+        },
+        {
+          "standard_name": "Cover Blocks",
+          "aliases": ["Cover blocks"],
+          "default_unit": "No.",
+          "category": "Material"
+        },
+        {
+          "standard_name": "Cube Mould",
+          "aliases": ["Cube Mold New", "Cube Mould"],
+          "default_unit": "No.",
+          "category": "Recevable"
+        }
+      ]
+    },
+    {
+      "name": "Steel & TMT Bars",
+      "items": [
+        {
+          "standard_name": "TMT Steel 8 MM",
+          "aliases": ["Steel 8 MM", "Steel 8 mm", "8 MM Steel"],
+          "default_unit": "KG",
+          "category": "Material"
+        },
+        {
+          "standard_name": "TMT Steel 10 MM",
+          "aliases": ["Steel 10 MM", "Steel 10 mm", "10 MM Steel"],
+          "default_unit": "KG",
+          "category": "Material"
+        },
+        {
+          "standard_name": "TMT Steel 12 MM",
+          "aliases": ["Steel 12 MM", "Steel 12 mm", "12 MM Steel", "sariya 12 MM"],
+          "default_unit": "KG",
+          "category": "Material"
+        },
+        {
+          "standard_name": "TMT Steel 16 MM",
+          "aliases": ["Steel 16 MM", "Steel 16 mm", "16 MM Steel", "16 MM sariya 2 fit"],
+          "default_unit": "KG",
+          "category": "Material"
+        },
+        {
+          "standard_name": "TMT Steel 20 MM",
+          "aliases": ["Steel 20 MM", "Steel 20 mm", "20 MM Steel"],
+          "default_unit": "KG",
+          "category": "Material"
+        },
+        {
+          "standard_name": "TMT Steel 25 MM",
+          "aliases": ["Steel 25 MM", "25 MM Steel", "25 MM Steel 20'"],
+          "default_unit": "KG",
+          "category": "Material"
+        }
+      ]
+    },
+    {
+      "name": "Aggregate & Sand",
+      "items": [
+        {
+          "standard_name": "Metal 10 MM (Aggregate)",
+          "aliases": ["10 MM Metal"],
+          "default_unit": "Cum",
+          "category": "Material"
+        },
+        {
+          "standard_name": "Metal 20 MM (Aggregate)",
+          "aliases": ["20 MM Metal", "20 MM METAL", "Metal 20 MM", "20 Metal"],
+          "default_unit": "Cum",
+          "category": "Material"
+        },
+        {
+          "standard_name": "Metal 25 MM (Aggregate)",
+          "aliases": ["25 MM Metal"],
+          "default_unit": "Cum",
+          "category": "Material"
+        },
+        {
+          "standard_name": "River Sand",
+          "aliases": ["River Sand", "R Send", "R send"],
+          "default_unit": "Cum",
+          "category": "Material"
+        },
+        {
+          "standard_name": "M-Sand (Manufactured Sand)",
+          "aliases": ["M Sand", "M Send", "M sand", "M send"],
+          "default_unit": "Cum",
+          "category": "Material"
+        }
+      ]
+    }
+  ]
+}

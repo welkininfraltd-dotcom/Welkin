@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.env
+*.json
+!app/item_master.json
+credentials.json
+welkin-*.json
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+uploads/
+mockup/
+android/

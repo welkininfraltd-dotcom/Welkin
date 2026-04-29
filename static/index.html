@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0b3d5c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
+  <title>Welkin Builders - Cash Tracker</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<!-- ── LOGIN SCREEN ── -->
+<div id="login-screen" class="login-screen">
+  <div class="login-card">
+    <h2>🏗️ Welkin Builders</h2>
+    <p class="sub">Infrastructure Ltd — Daily Cash Entry</p>
+    <div class="fg">
+      <label>Mobile Number</label>
+      <input id="login-mobile" type="tel" placeholder="10 digit mobile" maxlength="10">
+    </div>
+    <div class="fg">
+      <label>Password</label>
+      <input id="login-password" type="password" placeholder="Enter password">
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()">Login</button>
+    <p id="login-error" class="login-error"></p>
+  </div>
+</div>
+
+<!-- ── MAIN APP ── -->
+<div id="app-screen" class="app" style="display:none">
+  <div class="header">
+    <div class="header-row">
+      <div>
+        <h1 id="header-name">🏗️ Cash Tracker</h1>
+        <span class="badge" id="header-site"></span>
+      </div>
+      <div style="position:relative">
+        <div class="avatar" id="header-avatar" onclick="switchTab('more')">OW</div>
+      </div>
+    </div>
+  </div>
+  <div class="tabs" id="nav-tabs"></div>
+  <div class="screens">
+    <div id="screen-entry" class="screen active"></div>
+    <div id="screen-history" class="screen"></div>
+    <div id="screen-summary" class="screen"></div>
+    <div id="screen-admin" class="screen"></div>
+    <div id="screen-more" class="screen"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
