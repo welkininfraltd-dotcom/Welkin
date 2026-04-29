@@ -37,10 +37,11 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # If credentials JSON is provided as env var (cloud deployment),
-# write it to a temp file so gspread can read it
-if settings.google_credentials_json and not Path(settings.google_credentials_path).exists():
+# ALWAYS write it to a file so gspread can read it
+_creds_json = settings.google_credentials_json or os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
+if _creds_json and _creds_json.strip().startswith("{"):
     _creds_path = Path(tempfile.gettempdir()) / "gcp_credentials.json"
-    _creds_path.write_text(settings.google_credentials_json)
+    _creds_path.write_text(_creds_json)
     settings.google_credentials_path = str(_creds_path)
 
 # Use PORT env var if set (Railway, Heroku, etc.)
