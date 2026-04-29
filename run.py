@@ -1,12 +1,11 @@
 """Run the Construction Cash Tracker server."""
+import os
 import uvicorn
 
-from app.config import settings
-
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run(
         "app.main:app",
-        host=settings.app_host,
-        port=settings.app_port,
-        reload=True,
+        host="0.0.0.0",
+        port=port,
     )
