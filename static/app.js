@@ -263,24 +263,18 @@ async function loadEntryForm() {
       <div class="fg"><label>Party / Vendor</label>
         <select id="e-party" onchange="onVendorChange()"><option value="">Loading vendors...</option></select>
       </div>
-      <div class="fg"><label>📦 Item / Material</label>
-        <select id="e-item" onchange="onItemChange()">${buildItemOptions()}</select>
-      </div>
-      <div id="custom-item-row" style="display:none" class="fg">
-        <label>Custom Item Name</label><input id="e-custom-item" placeholder="Type item name">
-      </div>
-      <div class="row3">
-        <div class="fg"><label>Qty</label><input type="number" id="e-qty" placeholder="0" oninput="calcTotal()"></div>
-        <div class="fg"><label>Unit</label><select id="e-unit">${buildUnitOptions("No.")}</select></div>
-        <div class="fg"><label>Rate (₹)</label><input type="number" id="e-rate" placeholder="0" oninput="calcTotal()"></div>
-      </div>
-      <div class="amount-box">
-        <span class="label">Total Amount</span>
-        <span class="value" id="e-total">₹ 0</span>
-      </div>
       <div class="row2">
-        <div class="fg"><label>Payment Mode</label><select id="e-payment">${(ITEMS?.payment_modes || ["Cash","UPI","Bank Transfer","Challan","Credit"]).map(m => `<option>${m}</option>`).join("")}</select></div>
+        <div class="fg"><label>Payment Mode</label><select id="e-payment">${(ITEMS?.payment_modes || ["Cash","UPI","Bank Transfer","Challan","Credit","HO (Head Office)"]).map(m => `<option>${m}</option>`).join("")}</select></div>
         <div class="fg"><label>Ref Ledger</label><select id="e-ledger">${(ITEMS?.ledger_types || ["Material"]).map(l => `<option>${l}</option>`).join("")}</select></div>
+      </div>
+
+      <div style="font-size:.75em;font-weight:700;color:var(--primary);margin:10px 0 6px">📦 Line Items</div>
+      <div id="line-items-list"></div>
+      <button type="button" class="btn btn-outline btn-sm" onclick="addLineItem()" style="margin-bottom:10px">+ Add Item</button>
+
+      <div class="amount-box">
+        <span class="label">Grand Total</span>
+        <span class="value" id="e-total">₹ 0</span>
       </div>
       <div class="fg"><label>📸 Invoice</label>
         <div style="display:flex;align-items:center;gap:8px">
@@ -292,6 +286,8 @@ async function loadEntryForm() {
       <div class="fg"><label>Remarks</label><textarea id="e-remarks" rows="2" placeholder="Optional notes..."></textarea></div>
       <button class="btn btn-primary" id="save-entry-btn" onclick="submitEntry()">💾 Save Entry</button>
     </div>`;
+  // Load vendors and add first line item
+  addLineItem();
   // Load vendors into select dropdown (grouped by category)
   try {
     const vendors = await api("/api/vendors");
@@ -331,16 +327,82 @@ function onVendorChange() {
   }
 }
 
-function onItemChange() {
-  const sel = document.getElementById("e-item");
+// ── Line Items ────────────────────────────────────────────────────
+let _lineItemCount = 0;
+
+function addLineItem() {
+  const idx = _lineItemCount++;
+  const list = document.getElementById("line-items-list");
+  if (!list) return;
+  const div = document.createElement("div");
+  div.id = `li-${idx}`;
+  div.className = "card";
+  div.style.cssText = "padding:10px;margin-bottom:8px;border:1.5px solid var(--border);position:relative";
+  div.innerHTML = `
+    ${idx > 0 ? `<span style="position:absolute;top:6px;right:8px;cursor:pointer;font-size:.8em;color:var(--danger)" onclick="removeLineItem(${idx})">✕</span>` : ''}
+    <div class="fg"><label>Item</label><select class="li-item" onchange="onLineItemChange(${idx})">${buildItemOptions()}</select></div>
+    <div class="li-custom" style="display:none"><div class="fg"><label>Custom Item</label><input class="li-custom-name" placeholder="Type item name"></div></div>
+    <div class="row3">
+      <div class="fg"><label>Qty</label><input type="number" class="li-qty" placeholder="0" oninput="calcGrandTotal()"></div>
+      <div class="fg"><label>Unit</label><select class="li-unit">${buildUnitOptions("No.")}</select></div>
+      <div class="fg"><label>Rate ₹</label><input type="number" class="li-rate" placeholder="0" oninput="calcGrandTotal()"></div>
+    </div>
+    <div style="text-align:right;font-size:.82em;font-weight:700;color:var(--primary)" class="li-subtotal">₹ 0</div>`;
+  list.appendChild(div);
+}
+
+function removeLineItem(idx) {
+  const el = document.getElementById(`li-${idx}`);
+  if (el) { el.remove(); calcGrandTotal(); }
+}
+
+function onLineItemChange(idx) {
+  const div = document.getElementById(`li-${idx}`);
+  if (!div) return;
+  const sel = div.querySelector(".li-item");
   const opt = sel.options[sel.selectedIndex];
   if (sel.value === "__custom__") {
-    document.getElementById("custom-item-row").style.display = "block";
+    div.querySelector(".li-custom").style.display = "block";
   } else {
-    document.getElementById("custom-item-row").style.display = "none";
-    if (opt.dataset.unit) document.getElementById("e-unit").value = opt.dataset.unit;
-    if (opt.dataset.ledger) document.getElementById("e-ledger").value = opt.dataset.ledger;
+    div.querySelector(".li-custom").style.display = "none";
+    if (opt.dataset.unit) div.querySelector(".li-unit").value = opt.dataset.unit;
+    if (opt.dataset.ledger) {
+      const ledgerSel = document.getElementById("e-ledger");
+      if (ledgerSel) ledgerSel.value = opt.dataset.ledger;
+    }
   }
+  calcGrandTotal();
+}
+
+function calcGrandTotal() {
+  let total = 0;
+  document.querySelectorAll("#line-items-list > div").forEach(div => {
+    const q = parseFloat(div.querySelector(".li-qty")?.value) || 0;
+    const r = parseFloat(div.querySelector(".li-rate")?.value) || 0;
+    const sub = q * r;
+    total += sub;
+    const subEl = div.querySelector(".li-subtotal");
+    if (subEl) subEl.textContent = "₹ " + sub.toLocaleString("en-IN");
+  });
+  const totalEl = document.getElementById("e-total");
+  if (totalEl) totalEl.textContent = "₹ " + total.toLocaleString("en-IN");
+}
+
+function getLineItems() {
+  const items = [];
+  document.querySelectorAll("#line-items-list > div").forEach(div => {
+    const sel = div.querySelector(".li-item");
+    const itemName = sel.value === "__custom__"
+      ? div.querySelector(".li-custom-name")?.value?.trim() || ""
+      : sel.value;
+    const qty = parseFloat(div.querySelector(".li-qty")?.value) || 0;
+    const rate = parseFloat(div.querySelector(".li-rate")?.value) || 0;
+    const unit = div.querySelector(".li-unit")?.value || "No.";
+    if (itemName && qty > 0) {
+      items.push({ item: itemName, qty, unit, rate, amount: qty * rate });
+    }
+  });
+  return items;
 }
 
 function onSiteChange() {
@@ -372,7 +434,10 @@ async function updateFundBalance() {
     let totalSpent = 0;
     if (CURRENT_SITE) {
       const myEntries = await api("/api/entries/" + CURRENT_SITE);
-      totalSpent = myEntries.reduce((s, e) => s + Number(e.amount), 0);
+      // Only count cash-deducting entries (exclude HO and Challan)
+      totalSpent = myEntries
+        .filter(e => e.payment_mode !== "HO (Head Office)" && e.payment_mode !== "Challan")
+        .reduce((s, e) => s + Number(e.amount), 0);
     }
 
     const bal = totalGiven - totalSpent;
@@ -388,11 +453,7 @@ async function updateFundBalance() {
   } catch (e) { bar.innerHTML = ""; }
 }
 
-function calcTotal() {
-  const q = parseFloat(document.getElementById("e-qty").value) || 0;
-  const r = parseFloat(document.getElementById("e-rate").value) || 0;
-  document.getElementById("e-total").textContent = "₹ " + (q * r).toLocaleString("en-IN");
-}
+function calcTotal() { calcGrandTotal(); }
 
 function onFileSelected(input) {
   const nameEl = document.getElementById("file-name");
@@ -407,63 +468,61 @@ function onFileSelected(input) {
 
 let _submitting = false;
 async function submitEntry() {
-  if (_submitting) return; // prevent double submit
-  const itemSel = document.getElementById("e-item").value;
-  const itemDesc = itemSel === "__custom__"
-    ? document.getElementById("e-custom-item").value.trim()
-    : itemSel;
-  const qty = parseFloat(document.getElementById("e-qty").value) || 0;
-  const rate = parseFloat(document.getElementById("e-rate").value) || 0;
+  if (_submitting) return;
+  const lineItems = getLineItems();
+  if (lineItems.length === 0) { toast("Add at least one item with quantity", true); return; }
 
-  if (!itemDesc || !qty) { toast("Please fill item and quantity", true); return; }
   const siteEl = document.getElementById("e-site");
   const targetSite = siteEl ? siteEl.value : CURRENT_SITE;
-  if (!targetSite) { toast("No site selected. Ask admin to assign you.", true); return; }
+  if (!targetSite) { toast("No site selected", true); return; }
 
   _submitting = true;
   const btn = document.getElementById("save-entry-btn");
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="font-size:1.2em;animation:spin .7s linear infinite;display:inline-block">🏗️</span> Saving...</span>';
+    btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px"><span style="font-size:1.1em;animation:spin .7s linear infinite;display:inline-block">🏗️</span> Saving ${lineItems.length} item(s)...</span>`;
     btn.style.opacity = "0.7";
   }
 
-  const body = {
+  const commonData = {
     entry_date: document.getElementById("e-date").value,
     bill_no: document.getElementById("e-bill").value || "Nil",
     party_name: document.getElementById("e-party").value.trim() || "Cash Purchase",
-    item_description: itemDesc,
-    quantity: qty,
-    unit: document.getElementById("e-unit").value,
-    rate: rate,
-    amount: qty * rate,
     payment_mode: document.getElementById("e-payment").value,
     ref_ledger: document.getElementById("e-ledger").value,
     remarks: document.getElementById("e-remarks").value,
   };
 
   try {
-    const result = await api(`/api/entries/${targetSite}`, { method: "POST", body });
-    toast("✅ Entry saved: " + result.entry_id);
+    let lastResult = null;
+    for (const li of lineItems) {
+      const body = {
+        ...commonData,
+        item_description: li.item,
+        quantity: li.qty,
+        unit: li.unit,
+        rate: li.rate,
+        amount: li.amount,
+      };
+      lastResult = await api(`/api/entries/${targetSite}`, { method: "POST", body });
+    }
 
-    // Clear server cache so data refreshes immediately
     api("/api/cache/clear", { method: "POST" }).catch(() => {});
-
-    // Show success on button briefly
+    toast(`✅ ${lineItems.length} item(s) saved!`);
     if (btn) { btn.innerHTML = "✅ Saved!"; btn.style.background = "var(--success)"; btn.style.opacity = "1"; }
 
     const fileInput = document.getElementById("e-file");
-    if (fileInput.files && fileInput.files[0]) {
+    if (fileInput.files && fileInput.files[0] && lastResult) {
       const fd = new FormData();
       fd.append("file", fileInput.files[0]);
       try {
-        await api(`/api/invoices/${targetSite}/${result.entry_id}`, { method: "POST", body: fd });
+        await api(`/api/invoices/${targetSite}/${lastResult.entry_id}`, { method: "POST", body: fd });
         toast("📸 Invoice uploaded!");
-      } catch (e) { toast("Entry saved but invoice upload failed: " + e.message, true); }
+      } catch (e) { toast("Items saved but invoice upload failed", true); }
     }
 
-    // Wait a moment to show success, then reset form
     await new Promise(r => setTimeout(r, 1000));
+    _lineItemCount = 0;
     loadEntryForm();
   } catch (e) {
     toast("❌ " + e.message, true);

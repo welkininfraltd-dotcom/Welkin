@@ -356,6 +356,10 @@ async def get_fund_reconciliation(
             eng = e.get("entered_by", "Unknown")
             if eng in admin_names:
                 continue  # Admin entries don't count against fund
+            # HO and Challan entries don't deduct from cash fund
+            pmode = e.get("payment_mode", "")
+            if pmode in ("HO (Head Office)", "Challan"):
+                continue
             spent.setdefault(sid, {}).setdefault(eng, 0)
             spent[sid][eng] += float(e.get("amount", 0))
 

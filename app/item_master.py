@@ -34,8 +34,11 @@ LEDGER_TYPES: list[str] = [
 ]
 
 PAYMENT_MODES: list[str] = [
-    "Cash", "UPI", "Bank Transfer", "Challan", "Credit",
+    "Cash", "UPI", "Bank Transfer", "Challan", "Credit", "HO (Head Office)",
 ]
+
+# Payment modes that DON'T deduct from cash fund balance
+NON_CASH_MODES: list[str] = ["HO (Head Office)", "Challan"]
 
 ITEM_CATEGORIES: list[CategoryGroup] = [
     {
