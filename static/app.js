@@ -897,13 +897,19 @@ async function showFundRecon() {
       html += "</div>";
     }
 
-    // Recent fund releases
+    // Recent fund releases with full details
     const funds = await api("/api/funds");
     if (funds.length > 0) {
-      html += '<div class="card"><h3>📋 Recent Fund Releases</h3>';
-      for (const f of funds.slice(-20).reverse()) {
+      html += '<div class="card"><h3>📋 Fund Release History</h3>';
+      for (const f of funds.slice(-30).reverse()) {
+        const dt = f.created_at ? new Date(f.created_at) : null;
+        const timeStr = dt ? dt.toLocaleString("en-IN", {day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}) : f.date;
         html += `<div class="entry-row">
-          <div class="entry-left"><div class="item-name">₹${Number(f.amount).toLocaleString("en-IN")} → ${f.engineer_name}</div><div class="item-meta">${f.site_id} · ${f.payment_mode} · ${f.date}</div></div>
+          <div class="entry-left">
+            <div class="item-name">₹${Number(f.amount).toLocaleString("en-IN")} → ${f.engineer_name}</div>
+            <div class="item-meta">📍 ${f.site_id} · ${f.payment_mode}${f.remarks ? ' · ' + f.remarks : ''}</div>
+            <div class="item-meta">🕐 ${timeStr} · By: ${f.released_by || 'Admin'}</div>
+          </div>
         </div>`;
       }
       html += "</div>";
