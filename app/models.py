@@ -20,6 +20,7 @@ class PaymentMode(str, Enum):
     bank_transfer = "Bank Transfer"
     challan = "Challan"
     credit = "Credit"
+    ho = "HO (Head Office)"
 
 
 class EntryStatus(str, Enum):
