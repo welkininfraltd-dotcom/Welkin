@@ -133,13 +133,13 @@ function toast(msg, isError = false) {
 function showLoading(el) {
   if (typeof el === "string") el = document.getElementById(el);
   if (!el) return;
-  el.innerHTML = `<div class="loader"><div class="spinner"></div><div class="loader-text">Loading...</div></div>`;
+  el.innerHTML = `<div class="loader"><div style="font-size:2em;animation:pulse 1s infinite">🏗️</div><div class="loader-text">Loading...</div></div>`;
 }
 
 function showSkeleton(el, rows = 4) {
   if (typeof el === "string") el = document.getElementById(el);
   if (!el) return;
-  let html = '<div class="card"><div class="skeleton h"></div>';
+  let html = '<div class="card"><div style="text-align:center;padding:10px"><div style="font-size:1.5em;animation:pulse 1s infinite">🏗️</div></div>';
   for (let i = 0; i < rows; i++) html += '<div class="skeleton bar" style="animation-delay:' + (i*0.1) + 's"></div><div style="height:8px"></div>';
   html += '</div>';
   el.innerHTML = html;
@@ -192,6 +192,7 @@ async function loadEntryForm() {
   const s = document.getElementById("screen-entry");
   const today = new Date().toISOString().split("T")[0];
   s.innerHTML = `
+    <div id="fund-balance-bar"></div>
     <div class="card">
       <h3>📝 New Cash Entry</h3>
       ${sitesHtml}
@@ -252,6 +253,20 @@ async function loadEntryForm() {
       sel.innerHTML = html;
     }
   } catch (e) { console.warn("Vendor load failed", e); }
+
+  // Load fund balance for site engineer
+  try {
+    const recon = await api("/api/funds/reconciliation" + (CURRENT_SITE ? "?site_id=" + CURRENT_SITE : ""));
+    const bar = document.getElementById("fund-balance-bar");
+    if (bar && recon.total_given > 0) {
+      const bal = recon.total_balance;
+      const color = bal >= 0 ? "var(--success)" : "var(--danger)";
+      bar.innerHTML = `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;background:${bal >= 0 ? '#e8fbe8' : '#fde8e8'}">
+        <div><div style="font-size:.7em;color:#666">Fund Balance</div><div style="font-size:.65em;color:#999">Given: ₹${Number(recon.total_given).toLocaleString("en-IN")} · Spent: ₹${Number(recon.total_spent).toLocaleString("en-IN")}</div></div>
+        <div style="font-size:1.2em;font-weight:800;color:${color}">₹${Number(bal).toLocaleString("en-IN")}</div>
+      </div>`;
+    }
+  } catch (e) {}
 }
 
 function onVendorChange() {
@@ -306,7 +321,9 @@ function onFileSelected(input) {
   }
 }
 
+let _submitting = false;
 async function submitEntry() {
+  if (_submitting) return; // prevent double submit
   const itemSel = document.getElementById("e-item").value;
   const itemDesc = itemSel === "__custom__"
     ? document.getElementById("e-custom-item").value.trim()
@@ -315,10 +332,13 @@ async function submitEntry() {
   const rate = parseFloat(document.getElementById("e-rate").value) || 0;
 
   if (!itemDesc || !qty) { toast("Please fill item and quantity", true); return; }
-  // Use site from selector if available, otherwise CURRENT_SITE
   const siteEl = document.getElementById("e-site");
   const targetSite = siteEl ? siteEl.value : CURRENT_SITE;
   if (!targetSite) { toast("No site selected. Ask admin to assign you.", true); return; }
+
+  _submitting = true;
+  const btn = document.querySelector('[onclick="submitEntry()"]');
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Saving..."; }
 
   const body = {
     entry_date: document.getElementById("e-date").value,
@@ -338,7 +358,6 @@ async function submitEntry() {
     const result = await api(`/api/entries/${targetSite}`, { method: "POST", body });
     toast("✅ Entry saved: " + result.entry_id);
 
-    // Upload invoice photo if attached
     const fileInput = document.getElementById("e-file");
     if (fileInput.files && fileInput.files[0]) {
       const fd = new FormData();
@@ -352,6 +371,8 @@ async function submitEntry() {
     loadEntryForm();  // reset form
   } catch (e) {
     toast("❌ " + e.message, true);
+  } finally {
+    _submitting = false;
   }
 }
 
@@ -378,8 +399,10 @@ async function loadHistory(statusFilter) {
       html += '<div class="card"><p style="text-align:center;color:#999">No entries yet</p></div>';
     } else {
       html += '<div class="card" id="history-list">';
-      for (const e of entries.reverse()) {
-        html += `<div class="entry-row" data-search="${(e.item_description + ' ' + e.party_name + ' ' + e.amount).toLowerCase()}">
+      window._historyEntries = entries;
+      for (let i = 0; i < entries.length; i++) {
+        const e = entries[i];
+        html += `<div class="entry-row" style="cursor:pointer" onclick="showEntryDetail(${i})" data-search="${(e.item_description + ' ' + e.party_name + ' ' + e.amount).toLowerCase()}">
           <div class="entry-left">
             <div class="item-name">${e.item_description} × ${e.quantity} ${e.unit}</div>
             <div class="item-meta">${e.party_name} · ${e.bill_no} <span class="status-badge status-${e.status}">${e.status}</span></div>
@@ -405,6 +428,80 @@ function filterHistory() {
   });
 }
 
+// ── Entry Detail View ─────────────────────────────────────────────
+function showEntryDetail(idx) {
+  const e = window._historyEntries?.[idx];
+  if (!e) return;
+  const s = document.getElementById("screen-history");
+  const isAdmin = USER && (USER.role === "admin" || USER.role === "Role.admin");
+  const canEdit = isAdmin && e.status === "Pending";
+
+  let html = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="margin:0">📋 Entry Detail</h3>
+      <button class="btn btn-outline btn-sm" onclick="loadHistory()">← Back</button>
+    </div>
+    <div style="text-align:center;margin-bottom:12px">
+      <span class="status-badge status-${e.status}" style="font-size:.85em;padding:4px 14px">${e.status}</span>
+    </div>
+    <table style="width:100%;font-size:.82em;border-collapse:collapse">
+      <tr><td style="padding:6px 0;color:#888;width:35%">Date</td><td style="padding:6px 0;font-weight:600">${e.entry_date}</td></tr>
+      <tr><td style="padding:6px 0;color:#888">Bill No.</td><td style="padding:6px 0;font-weight:600">${e.bill_no}</td></tr>
+      <tr><td style="padding:6px 0;color:#888">Vendor</td><td style="padding:6px 0;font-weight:600">${e.party_name}</td></tr>
+      <tr><td style="padding:6px 0;color:#888">Item</td><td style="padding:6px 0;font-weight:600">${e.item_description}</td></tr>
+      <tr><td style="padding:6px 0;color:#888">Qty × Rate</td><td style="padding:6px 0;font-weight:600">${e.quantity} ${e.unit} × ₹${Number(e.rate).toLocaleString("en-IN")}</td></tr>
+      <tr><td style="padding:6px 0;color:#888;font-size:1.1em">Amount</td><td style="padding:6px 0;font-weight:800;font-size:1.1em;color:var(--primary)">₹${Number(e.amount).toLocaleString("en-IN")}</td></tr>
+      <tr><td style="padding:6px 0;color:#888">Payment</td><td style="padding:6px 0">${e.payment_mode}</td></tr>
+      <tr><td style="padding:6px 0;color:#888">Ledger</td><td style="padding:6px 0">${e.ref_ledger}</td></tr>
+      <tr><td style="padding:6px 0;color:#888">Entered By</td><td style="padding:6px 0">${e.entered_by}</td></tr>
+      <tr><td style="padding:6px 0;color:#888">Entry ID</td><td style="padding:6px 0;font-size:.7em;color:#999">${e.entry_id}</td></tr>
+      ${e.remarks ? `<tr><td style="padding:6px 0;color:#888">Remarks</td><td style="padding:6px 0">${e.remarks}</td></tr>` : ''}
+      ${e.invoice_url ? `<tr><td style="padding:6px 0;color:#888">Invoice</td><td style="padding:6px 0"><a href="${e.invoice_url}" target="_blank" class="btn btn-outline btn-sm">📎 View Invoice</a></td></tr>` : ''}
+    </table>
+  </div>`;
+
+  // Admin can edit pending entries from site engineers
+  if (canEdit) {
+    html += `<div class="card">
+      <h3>✏️ Edit Entry (Admin)</h3>
+      <div class="row2">
+        <div class="fg"><label>Qty</label><input type="number" id="ed-qty" value="${e.quantity}"></div>
+        <div class="fg"><label>Rate (₹)</label><input type="number" id="ed-rate" value="${e.rate}"></div>
+      </div>
+      <div class="fg"><label>Amount (₹)</label><input type="number" id="ed-amount" value="${e.amount}"></div>
+      <div class="fg"><label>Remarks</label><input id="ed-remarks" value="${e.remarks || ''}" placeholder="Admin remarks"></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-success" onclick="approveWithEdit('${e.site_id}','${e.entry_id}')">✅ Approve</button>
+        <button class="btn btn-danger" onclick="rejectEntry('${e.site_id}','${e.entry_id}')">❌ Reject</button>
+      </div>
+    </div>`;
+  }
+
+  s.innerHTML = html;
+}
+
+async function approveWithEdit(siteId, entryId) {
+  const remarks = document.getElementById("ed-remarks")?.value || "";
+  try {
+    await api(`/api/reconcile/${siteId}`, {
+      method: "POST", body: { entry_id: entryId, action: "Approved", admin_remarks: remarks },
+    });
+    toast("✅ Entry approved!");
+    loadHistory();
+  } catch (e) { toast("Error: " + e.message, true); }
+}
+
+async function rejectEntry(siteId, entryId) {
+  const remarks = document.getElementById("ed-remarks")?.value || prompt("Reason for rejection:") || "";
+  try {
+    await api(`/api/reconcile/${siteId}`, {
+      method: "POST", body: { entry_id: entryId, action: "Rejected", admin_remarks: remarks },
+    });
+    toast("❌ Entry rejected");
+    loadHistory();
+  } catch (e) { toast("Error: " + e.message, true); }
+}
+
 // ── SUMMARY ───────────────────────────────────────────────────────
 let SUMMARY_FILTER = "month"; // week, month, year, all, custom
 let SUMMARY_FROM = "";
@@ -413,7 +510,7 @@ let SUMMARY_TO = "";
 async function loadSummary() {
   const s = document.getElementById("screen-summary");
   const isAdmin = USER && (USER.role === "admin" || USER.role === "Role.admin");
-  s.innerHTML = '<div class="loader"><div class="spinner"></div><div class="loader-text">Loading summary...</div></div>';
+  s.innerHTML = '<div class="loader"><div style="font-size:2em;animation:pulse 1s infinite">🏗️</div><div class="loader-text">Loading summary...</div></div>';
 
   try {
     const sites = await api("/api/sites");
