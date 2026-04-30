@@ -326,23 +326,26 @@ async def get_fund_reconciliation(
     site_id: str | None = Query(None),
     user: dict = Depends(get_current_user),
 ):
-    """Get fund reconciliation: given vs spent per site per engineer."""
-    # Get all funds
+    """Get fund reconciliation: given vs spent per site per engineer.
+    Only site engineer entries count as 'spent'. Admin entries are excluded."""
     funds = sheets_service.list_funds(site_id=site_id)
-    # Get all entries across sites
     sites = sheets_service.list_sites()
     if site_id:
         sites = [s for s in sites if str(s.get("site_id")) == site_id]
 
-    # Calculate given per site+engineer
-    given: dict[str, dict[str, float]] = {}  # site -> engineer -> amount
+    # Get admin users to exclude their entries from "spent"
+    all_users = sheets_service.list_users()
+    admin_names = {u["name"] for u in all_users if u.get("role") in ("admin", "Role.admin")}
+
+    # Calculate given per site → engineer
+    given: dict[str, dict[str, float]] = {}
     for f in funds:
         sid = str(f.get("site_id", ""))
         eng = f.get("engineer_name", "Unknown")
         given.setdefault(sid, {}).setdefault(eng, 0)
         given[sid][eng] += float(f.get("amount", 0))
 
-    # Calculate spent per site+engineer
+    # Calculate spent per site → engineer (exclude admin entries)
     spent: dict[str, dict[str, float]] = {}
     for site in sites:
         sid = str(site.get("site_id", ""))
@@ -351,29 +354,37 @@ async def get_fund_reconciliation(
         entries = sheets_service.list_entries(sid)
         for e in entries:
             eng = e.get("entered_by", "Unknown")
+            if eng in admin_names:
+                continue  # Admin entries don't count against fund
             spent.setdefault(sid, {}).setdefault(eng, 0)
             spent[sid][eng] += float(e.get("amount", 0))
 
-    # Build reconciliation
-    recon = []
-    all_keys = set()
-    for sid in set(list(given.keys()) + list(spent.keys())):
+    # Build per-site summary for admin view
+    site_summary = []
+    for site in sites:
+        sid = str(site.get("site_id", ""))
+        if site.get("name", "").startswith("[CLOSED]"):
+            continue
+        site_given = sum(given.get(sid, {}).values())
+        site_spent = sum(spent.get(sid, {}).values())
+        engineers = []
         for eng in set(list(given.get(sid, {}).keys()) + list(spent.get(sid, {}).keys())):
             g = given.get(sid, {}).get(eng, 0)
             s = spent.get(sid, {}).get(eng, 0)
-            recon.append({
-                "site_id": sid,
-                "engineer": eng,
-                "fund_given": g,
-                "fund_spent": s,
-                "balance": g - s,
+            if g > 0 or s > 0:
+                engineers.append({"name": eng, "given": g, "spent": s, "balance": g - s})
+        if site_given > 0 or site_spent > 0:
+            site_summary.append({
+                "site_id": sid, "site_name": site.get("name", sid),
+                "total_given": site_given, "total_spent": site_spent,
+                "balance": site_given - site_spent, "engineers": engineers,
             })
 
-    total_given = sum(r["fund_given"] for r in recon)
-    total_spent = sum(r["fund_spent"] for r in recon)
+    total_given = sum(s["total_given"] for s in site_summary)
+    total_spent = sum(s["total_spent"] for s in site_summary)
 
     return {
-        "reconciliation": recon,
+        "sites": site_summary,
         "total_given": total_given,
         "total_spent": total_spent,
         "total_balance": total_given - total_spent,

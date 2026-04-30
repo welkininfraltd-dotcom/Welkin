@@ -822,7 +822,7 @@ async function doReleaseFund() {
 // ── Fund Reconciliation View ──────────────────────────────────────
 async function showFundRecon() {
   const c = document.getElementById("admin-content");
-  c.innerHTML = '<div class="card"><p>Loading reconciliation...</p></div>';
+  c.innerHTML = '<div class="loader"><div style="font-size:2em;animation:pulse 1s infinite">🏗️</div><div class="loader-text">Loading reconciliation...</div></div>';
   try {
     const data = await api("/api/funds/reconciliation");
     let html = `<div class="card">
@@ -831,28 +831,42 @@ async function showFundRecon() {
         <button class="btn btn-outline btn-sm" onclick="loadAdmin()">← Back</button>
       </div>
       <div class="stat-grid" style="margin-bottom:12px">
-        <div class="stat"><div class="val" style="color:var(--success)">₹${Number(data.total_given).toLocaleString("en-IN")}</div><div class="lbl">Total Given</div></div>
-        <div class="stat"><div class="val" style="color:var(--danger)">₹${Number(data.total_spent).toLocaleString("en-IN")}</div><div class="lbl">Total Spent</div></div>
-        <div class="stat" style="grid-column:span 2"><div class="val" style="color:${data.total_balance >= 0 ? 'var(--success)' : 'var(--danger)'}">₹${Number(data.total_balance).toLocaleString("en-IN")}</div><div class="lbl">Balance (Given - Spent)</div></div>
-      </div>`;
+        <div class="stat"><div class="val" style="color:var(--success)">₹${Number(data.total_given).toLocaleString("en-IN")}</div><div class="lbl">Total Fund Given</div></div>
+        <div class="stat"><div class="val" style="color:var(--danger)">₹${Number(data.total_spent).toLocaleString("en-IN")}</div><div class="lbl">Engineers Spent</div></div>
+        <div class="stat" style="grid-column:span 2"><div class="val" style="color:${data.total_balance >= 0 ? 'var(--success)' : 'var(--danger)'}">₹${Number(data.total_balance).toLocaleString("en-IN")}</div><div class="lbl">Remaining Balance</div></div>
+      </div>
+      <p style="font-size:.65em;color:#999;margin-top:-8px">* Only site engineer entries count as spent. Admin entries excluded.</p>
+    </div>`;
 
-    if (data.reconciliation.length > 0) {
-      html += '<div style="font-size:.75em;font-weight:700;color:var(--primary);margin:8px 0">Per Site / Engineer</div>';
-      for (const r of data.reconciliation) {
-        const balColor = r.balance >= 0 ? "var(--success)" : "var(--danger)";
-        html += `<div class="entry-row">
-          <div class="entry-left">
-            <div class="item-name">${r.engineer} — ${r.site_id}</div>
-            <div class="item-meta">Given: ₹${Number(r.fund_given).toLocaleString("en-IN")} · Spent: ₹${Number(r.fund_spent).toLocaleString("en-IN")}</div>
-          </div>
-          <div class="entry-right"><div class="amount" style="color:${balColor}">₹${Number(r.balance).toLocaleString("en-IN")}</div><div class="date">Balance</div></div>
-        </div>`;
+    // Per-site breakdown
+    for (const site of (data.sites || [])) {
+      const balColor = site.balance >= 0 ? "var(--success)" : "var(--danger)";
+      html += `<div class="card">
+        <h3>📍 ${site.site_name || site.site_id}</h3>
+        <div class="stat-grid" style="margin-bottom:8px">
+          <div class="stat"><div class="val" style="font-size:1.1em;color:var(--success)">₹${Number(site.total_given).toLocaleString("en-IN")}</div><div class="lbl">Given</div></div>
+          <div class="stat"><div class="val" style="font-size:1.1em;color:var(--danger)">₹${Number(site.total_spent).toLocaleString("en-IN")}</div><div class="lbl">Spent</div></div>
+        </div>
+        <div style="text-align:center;margin-bottom:8px"><span style="font-size:1em;font-weight:800;color:${balColor}">Balance: ₹${Number(site.balance).toLocaleString("en-IN")}</span></div>`;
+
+      // Engineers in this site
+      if (site.engineers && site.engineers.length > 0) {
+        html += '<div style="font-size:.7em;font-weight:700;color:#666;margin:6px 0 4px">Engineers:</div>';
+        for (const eng of site.engineers) {
+          const eColor = eng.balance >= 0 ? "var(--success)" : "var(--danger)";
+          html += `<div class="entry-row">
+            <div class="entry-left">
+              <div class="item-name">👤 ${eng.name}</div>
+              <div class="item-meta">Given: ₹${Number(eng.given).toLocaleString("en-IN")} · Spent: ₹${Number(eng.spent).toLocaleString("en-IN")}</div>
+            </div>
+            <div class="entry-right"><div class="amount" style="color:${eColor}">₹${Number(eng.balance).toLocaleString("en-IN")}</div><div class="date">Balance</div></div>
+          </div>`;
+        }
       }
-    } else {
-      html += '<p style="font-size:.82em;color:#999">No fund releases yet</p>';
+      html += "</div>";
     }
-    html += "</div>";
 
+    // Recent fund releases
     const funds = await api("/api/funds");
     if (funds.length > 0) {
       html += '<div class="card"><h3>📋 Recent Fund Releases</h3>';
@@ -865,7 +879,7 @@ async function showFundRecon() {
     }
 
     c.innerHTML = html;
-  } catch (e) { c.innerHTML = `<div class="card"><p style="color:var(--danger)">${e.message}</p></div>`; }
+  } catch (e) { c.innerHTML = `<div class="card"><p style="color:var(--danger)">${e.message}</p><button class="btn btn-outline btn-sm" onclick="loadAdmin()">← Back</button></div>`; }
 }
 
 async function reconcile(siteId, entryId, action) {
