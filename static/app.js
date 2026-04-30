@@ -120,12 +120,40 @@ function switchTab(name) {
   else if (name === "more") loadMore();
 }
 
-// ── Toast ─────────────────────────────────────────────────────────
+// ── Toast with sound ───────────────────────────────────────────────
+function playSound(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.value = 0.15;
+    if (type === "success") {
+      osc.frequency.value = 800; osc.type = "sine";
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.start(); osc.stop(ctx.currentTime + 0.3);
+    } else if (type === "error") {
+      osc.frequency.value = 300; osc.type = "square";
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.start(); osc.stop(ctx.currentTime + 0.4);
+    } else {
+      osc.frequency.value = 600; osc.type = "sine";
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+      osc.start(); osc.stop(ctx.currentTime + 0.15);
+    }
+  } catch (e) {}
+}
+
 function toast(msg, isError = false) {
   const t = document.getElementById("toast");
   t.textContent = msg;
   t.className = "toast" + (isError ? " error" : "");
   t.style.display = "block";
+  playSound(isError ? "error" : "success");
   setTimeout(() => { t.style.display = "none"; }, 2500);
 }
 
@@ -371,6 +399,9 @@ async function submitEntry() {
   try {
     const result = await api(`/api/entries/${targetSite}`, { method: "POST", body });
     toast("✅ Entry saved: " + result.entry_id);
+
+    // Clear server cache so data refreshes immediately
+    api("/api/cache/clear", { method: "POST" }).catch(() => {});
 
     // Show success on button briefly
     if (btn) { btn.innerHTML = "✅ Saved!"; btn.style.background = "var(--success)"; btn.style.opacity = "1"; }

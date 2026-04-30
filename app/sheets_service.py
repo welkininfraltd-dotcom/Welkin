@@ -44,7 +44,7 @@ META_SHEETS = {
 
 # ── In-memory cache to reduce Google Sheets API calls ──────────────
 _cache: dict[str, tuple[float, object]] = {}
-CACHE_TTL = 60  # seconds
+CACHE_TTL = 15  # seconds (short TTL for faster data refresh)
 
 
 def _cache_get(key: str):
