@@ -157,6 +157,38 @@ function toast(msg, isError = false) {
   setTimeout(() => { t.style.display = "none"; }, 2500);
 }
 
+// ── Reusable submit button animation ──────────────────────────────
+async function animatedSubmit(btn, asyncFn) {
+  if (btn._busy) return;
+  btn._busy = true;
+  const origHtml = btn.innerHTML;
+  const origBg = btn.style.background;
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="font-size:1.1em;animation:spin .7s linear infinite;display:inline-block">🏗️</span> Processing...</span>';
+  btn.style.opacity = "0.7";
+  try {
+    await asyncFn();
+    btn.innerHTML = "✅ Done!";
+    btn.style.background = "var(--success)";
+    btn.style.opacity = "1";
+    playSound("success");
+    await new Promise(r => setTimeout(r, 800));
+  } catch (e) {
+    btn.innerHTML = "❌ Failed";
+    btn.style.background = "var(--danger)";
+    btn.style.opacity = "1";
+    playSound("error");
+    toast("❌ " + e.message, true);
+    await new Promise(r => setTimeout(r, 1200));
+  } finally {
+    btn.innerHTML = origHtml;
+    btn.style.background = origBg || "";
+    btn.style.opacity = "1";
+    btn.disabled = false;
+    btn._busy = false;
+  }
+}
+
 // ── Loading skeleton ──────────────────────────────────────────────
 function showLoading(el) {
   if (typeof el === "string") el = document.getElementById(el);
@@ -856,7 +888,7 @@ async function showReleaseFund() {
     <div class="fg"><label>Amount (₹)</label><input type="number" id="rf-amount" placeholder="10000"></div>
     <div class="fg"><label>Payment Mode</label><select id="rf-mode"><option>Cash</option><option>UPI</option><option>Bank Transfer</option></select></div>
     <div class="fg"><label>Remarks</label><input id="rf-remarks" placeholder="e.g. Weekly fund for materials"></div>
-    <button class="btn btn-primary" onclick="doReleaseFund()">💰 Release Fund</button>
+    <button class="btn btn-primary" onclick="animatedSubmit(this, doReleaseFund)">💰 Release Fund</button>
     <button class="btn btn-outline" onclick="loadAdmin()">Cancel</button>
   </div>`;
 }
@@ -864,7 +896,7 @@ async function showReleaseFund() {
 async function doReleaseFund() {
   const engSel = document.getElementById("rf-eng");
   const engOpt = engSel.options[engSel.selectedIndex];
-  if (!engSel.value) { toast("Select an engineer", true); return; }
+  if (!engSel.value) throw new Error("Select an engineer");
   const fd = new FormData();
   fd.append("site_id", document.getElementById("rf-site").value);
   fd.append("engineer_mobile", engSel.value);
@@ -873,11 +905,9 @@ async function doReleaseFund() {
   fd.append("date", document.getElementById("rf-date").value);
   fd.append("payment_mode", document.getElementById("rf-mode").value);
   fd.append("remarks", document.getElementById("rf-remarks").value);
-  try {
-    await api("/api/funds", { method: "POST", body: fd });
-    toast("✅ Fund released!");
-    loadAdmin();
-  } catch (e) { toast("Error: " + e.message, true); }
+  await api("/api/funds", { method: "POST", body: fd });
+  toast("✅ Fund released!");
+  loadAdmin();
 }
 
 // ── Fund Reconciliation View ──────────────────────────────────────
@@ -973,24 +1003,22 @@ function showCreateSite() {
     <div class="fg"><label>Site Name</label><input id="cs-name" placeholder="e.g. KCJ Road Project - Indore"></div>
     <div class="fg"><label>Location</label><input id="cs-loc" placeholder="e.g. Indore, MP"></div>
     <p style="font-size:.7em;color:#888;margin-bottom:10px">Sheet tab will be created with the Site ID name</p>
-    <button class="btn btn-primary" onclick="doCreateSite()">Create Site</button>
+    <button class="btn btn-primary" onclick="animatedSubmit(this, doCreateSite)">📍 Create Site</button>
     <button class="btn btn-outline" onclick="loadAdmin()">Cancel</button>
   </div>`;
 }
 
 async function doCreateSite() {
   const siteId = document.getElementById("cs-id").value.trim();
-  if (!siteId) { toast("Site ID is required", true); return; }
-  try {
-    await api("/api/sites", { method: "POST", body: {
-      site_id: siteId,
-      name: document.getElementById("cs-name").value.trim(),
-      location: document.getElementById("cs-loc").value.trim(),
-      sheet_name: siteId,  // sheet tab = site ID
-    }});
-    toast("✅ Site created! Sheet tab: " + siteId);
-    loadAdmin();
-  } catch (e) { toast("Error: " + e.message, true); }
+  if (!siteId) throw new Error("Site ID is required");
+  await api("/api/sites", { method: "POST", body: {
+    site_id: siteId,
+    name: document.getElementById("cs-name").value.trim(),
+    location: document.getElementById("cs-loc").value.trim(),
+    sheet_name: siteId,
+  }});
+  toast("✅ Site created! Sheet tab: " + siteId);
+  loadAdmin();
 }
 
 function showEditSite(siteId, name, location) {
@@ -1032,23 +1060,21 @@ async function showCreateUser() {
         ${siteToggles || '<p style="font-size:.78em;color:#999">No sites created yet</p>'}
       </div>
     </div>
-    <button class="btn btn-primary" onclick="doCreateUser()">Create Account</button>
+    <button class="btn btn-primary" onclick="animatedSubmit(this, doCreateUser)">👤 Create Account</button>
     <button class="btn btn-outline" onclick="loadAdmin()">Cancel</button>
   </div>`;
 }
 
 async function doCreateUser() {
   const checked = [...document.querySelectorAll("#cu-sites-list .switch.on")].map(el => el.dataset.site);
-  try {
-    await api("/api/users", { method: "POST", body: {
-      name: document.getElementById("cu-name").value.trim(),
-      mobile: document.getElementById("cu-mobile").value.trim(),
-      password: document.getElementById("cu-pass").value,
-      site_ids: checked.join(","),
-    }});
-    toast("✅ Site engineer account created!");
-    loadAdmin();
-  } catch (e) { toast("Error: " + e.message, true); }
+  await api("/api/users", { method: "POST", body: {
+    name: document.getElementById("cu-name").value.trim(),
+    mobile: document.getElementById("cu-mobile").value.trim(),
+    password: document.getElementById("cu-pass").value,
+    site_ids: checked.join(","),
+  }});
+  toast("✅ Site engineer account created!");
+  loadAdmin();
 }
 
 async function showEditUser(mobile, name, siteIds) {
@@ -1067,7 +1093,7 @@ async function showEditUser(mobile, name, siteIds) {
     <div class="fg"><label>Assigned Sites</label>
       <div id="eu-sites-list" style="border:1.5px solid var(--border);border-radius:8px;padding:8px">${siteToggles}</div>
     </div>
-    <button class="btn btn-primary" onclick="doEditUser('${mobile}')">Save Changes</button>
+    <button class="btn btn-primary" onclick="animatedSubmit(this, ()=>doEditUser('${mobile}'))">💾 Save Changes</button>
     <button class="btn btn-outline" onclick="loadAdmin()">Cancel</button>
   </div>`;
 }
@@ -1079,11 +1105,9 @@ async function doEditUser(mobile) {
   fd.append("site_ids", checked.join(","));
   const pw = document.getElementById("eu-pass").value;
   if (pw) fd.append("password", pw);
-  try {
-    await api(`/api/users/${mobile}`, { method: "PUT", body: fd });
-    toast("✅ User updated!");
-    loadAdmin();
-  } catch (e) { toast("Error: " + e.message, true); }
+  await api(`/api/users/${mobile}`, { method: "PUT", body: fd });
+  toast("✅ User updated!");
+  loadAdmin();
 }
 
 // ── MORE / SETTINGS ───────────────────────────────────────────────
@@ -1148,7 +1172,7 @@ function showAddItemInMore() {
       <div class="fg"><label>Default Unit</label><select id="ai-unit">${(ITEMS?.units || ["No.","Bag","KG","Cum","Cft","MT","Ton","Litre","Metre","Ft.","Sqft","Set","Box","Roll"]).map(u => '<option>' + u + '</option>').join("")}</select></div>
       <div class="fg"><label>Ledger</label><select id="ai-ledger">${(ITEMS?.ledger_types || ["Material","Consumable","Recevable","Centering","Machinery","General","Stationery"]).map(l => '<option>' + l + '</option>').join("")}</select></div>
     </div>
-    <button class="btn btn-primary" onclick="doAddItemFromMore()">Add Item</button>
+    <button class="btn btn-primary" onclick="animatedSubmit(this, doAddItemFromMore)">📦 Add Item</button>
     <button class="btn btn-outline" onclick="showItemListInMore()">Cancel</button>
   </div>`;
 }
@@ -1183,7 +1207,7 @@ function showEditItem(iid, name, category, aliases, unit, ledger) {
       <div class="fg"><label>Unit</label><select id="ei-unit">${(ITEMS?.units || ["No.","Bag","KG","Cum"]).map(u => '<option' + (u===unit?' selected':'') + '>' + u + '</option>').join("")}</select></div>
       <div class="fg"><label>Ledger</label><select id="ei-ledger">${(ITEMS?.ledger_types || ["Material"]).map(l => '<option' + (l===ledger?' selected':'') + '>' + l + '</option>').join("")}</select></div>
     </div>
-    <button class="btn btn-primary" onclick="doEditItem('${iid}')">Save</button>
+    <button class="btn btn-primary" onclick="animatedSubmit(this, ()=>doEditItem('${iid}'))">💾 Save</button>
     <button class="btn btn-outline" onclick="showItemListInMore()">Cancel</button>
   </div>`;
 }
@@ -1247,7 +1271,7 @@ async function showCreateVendorInMore() {
         ${siteToggles || '<p style="font-size:.78em;color:#999">No sites yet</p>'}
       </div>
     </div>
-    <button class="btn btn-primary" onclick="doCreateVendorFromMore()">Add Vendor</button>
+    <button class="btn btn-primary" onclick="animatedSubmit(this, doCreateVendorFromMore)">🏪 Add Vendor</button>
     <button class="btn btn-outline" onclick="showVendorListInMore()">Cancel</button>
   </div>`;
 }
@@ -1282,7 +1306,7 @@ async function showEditVendor(vid, name, contact, address, category, siteIds) {
     <div class="fg"><label>Address</label><input id="ev-address" value="${address}"></div>
     <div class="fg"><label>Category</label><input id="ev-category" value="${category}"></div>
     <div class="fg"><label>Sites</label><div id="ev-sites-list" style="border:1.5px solid var(--border);border-radius:8px;padding:8px">${siteToggles}</div></div>
-    <button class="btn btn-primary" onclick="doEditVendor('${vid}')">Save</button>
+    <button class="btn btn-primary" onclick="animatedSubmit(this, ()=>doEditVendor('${vid}'))">💾 Save</button>
     <button class="btn btn-outline" onclick="showVendorListInMore()">Cancel</button>
   </div>`;
 }
