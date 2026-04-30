@@ -242,9 +242,12 @@ def create_site(site_id: str, name: str, location: str, spreadsheet_id: str,
 
     # Create the data worksheet with site_id as tab name
     target_sp = _open_spreadsheet(spreadsheet_id or settings.spreadsheet_id)
-    _ensure_worksheet(target_sp, actual_sheet, HEADER_ROW)
+    new_ws = _ensure_worksheet(target_sp, actual_sheet, HEADER_ROW)
+    logger.info("Created site %s → sheet tab '%s' (rows=%d)", site_id, actual_sheet, new_ws.row_count)
 
-    logger.info("Created site %s → sheet tab '%s'", site_id, actual_sheet)
+    # Clear sites cache
+    _cache_clear("sites")
+
     return {"site_id": site_id, "name": name, "location": location,
             "spreadsheet_id": spreadsheet_id or settings.spreadsheet_id,
             "sheet_name": actual_sheet, "created_by": created_by, "created_at": now}
