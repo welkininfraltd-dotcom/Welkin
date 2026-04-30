@@ -268,3 +268,7 @@ body {
 /* ── Prevent URL bar on Android ── */
 html, body { overscroll-behavior: none; }
 select:focus, input:focus { scroll-margin-top: 100px; }
+
+/* ── Save button states ── */
+#save-entry-btn { transition: all .3s; }
+#save-entry-btn:disabled { pointer-events: none; }

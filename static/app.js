@@ -230,7 +230,7 @@ async function loadEntryForm() {
         <input type="file" id="e-file" accept="image/*" capture="environment" style="display:none" onchange="onFileSelected(this)">
       </div>
       <div class="fg"><label>Remarks</label><textarea id="e-remarks" rows="2" placeholder="Optional notes..."></textarea></div>
-      <button class="btn btn-primary" onclick="submitEntry()">💾 Save Entry</button>
+      <button class="btn btn-primary" id="save-entry-btn" onclick="submitEntry()">💾 Save Entry</button>
     </div>`;
   // Load vendors into select dropdown (grouped by category)
   try {
@@ -254,19 +254,8 @@ async function loadEntryForm() {
     }
   } catch (e) { console.warn("Vendor load failed", e); }
 
-  // Load fund balance for site engineer
-  try {
-    const recon = await api("/api/funds/reconciliation" + (CURRENT_SITE ? "?site_id=" + CURRENT_SITE : ""));
-    const bar = document.getElementById("fund-balance-bar");
-    if (bar && recon.total_given > 0) {
-      const bal = recon.total_balance;
-      const color = bal >= 0 ? "var(--success)" : "var(--danger)";
-      bar.innerHTML = `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;background:${bal >= 0 ? '#e8fbe8' : '#fde8e8'}">
-        <div><div style="font-size:.7em;color:#666">Fund Balance</div><div style="font-size:.65em;color:#999">Given: ₹${Number(recon.total_given).toLocaleString("en-IN")} · Spent: ₹${Number(recon.total_spent).toLocaleString("en-IN")}</div></div>
-        <div style="font-size:1.2em;font-weight:800;color:${color}">₹${Number(bal).toLocaleString("en-IN")}</div>
-      </div>`;
-    }
-  } catch (e) {}
+  // Load fund balance
+  updateFundBalance();
 }
 
 function onVendorChange() {
@@ -301,7 +290,28 @@ function onSiteChange() {
     localStorage.setItem("current_site", CURRENT_SITE);
     const opt = sel.options[sel.selectedIndex];
     document.getElementById("header-site").textContent = "📍 " + opt.textContent;
+    // Refresh fund balance for new site
+    updateFundBalance();
   }
+}
+
+async function updateFundBalance() {
+  const bar = document.getElementById("fund-balance-bar");
+  if (!bar) return;
+  bar.innerHTML = '<div style="text-align:center;padding:8px;font-size:.75em;color:#999">Updating balance...</div>';
+  try {
+    const recon = await api("/api/funds/reconciliation" + (CURRENT_SITE ? "?site_id=" + CURRENT_SITE : ""));
+    if (recon.total_given > 0) {
+      const bal = recon.total_balance;
+      const color = bal >= 0 ? "var(--success)" : "var(--danger)";
+      bar.innerHTML = `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;background:${bal >= 0 ? '#e8fbe8' : '#fde8e8'}">
+        <div><div style="font-size:.7em;color:#666">Fund Balance</div><div style="font-size:.65em;color:#999">Given: ₹${Number(recon.total_given).toLocaleString("en-IN")} · Spent: ₹${Number(recon.total_spent).toLocaleString("en-IN")}</div></div>
+        <div style="font-size:1.2em;font-weight:800;color:${color}">₹${Number(bal).toLocaleString("en-IN")}</div>
+      </div>`;
+    } else {
+      bar.innerHTML = "";
+    }
+  } catch (e) { bar.innerHTML = ""; }
 }
 
 function calcTotal() {
@@ -337,8 +347,12 @@ async function submitEntry() {
   if (!targetSite) { toast("No site selected. Ask admin to assign you.", true); return; }
 
   _submitting = true;
-  const btn = document.querySelector('[onclick="submitEntry()"]');
-  if (btn) { btn.disabled = true; btn.textContent = "⏳ Saving..."; }
+  const btn = document.getElementById("save-entry-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="font-size:1.2em;animation:spin .7s linear infinite;display:inline-block">🏗️</span> Saving...</span>';
+    btn.style.opacity = "0.7";
+  }
 
   const body = {
     entry_date: document.getElementById("e-date").value,
@@ -358,6 +372,9 @@ async function submitEntry() {
     const result = await api(`/api/entries/${targetSite}`, { method: "POST", body });
     toast("✅ Entry saved: " + result.entry_id);
 
+    // Show success on button briefly
+    if (btn) { btn.innerHTML = "✅ Saved!"; btn.style.background = "var(--success)"; btn.style.opacity = "1"; }
+
     const fileInput = document.getElementById("e-file");
     if (fileInput.files && fileInput.files[0]) {
       const fd = new FormData();
@@ -368,9 +385,12 @@ async function submitEntry() {
       } catch (e) { toast("Entry saved but invoice upload failed: " + e.message, true); }
     }
 
-    loadEntryForm();  // reset form
+    // Wait a moment to show success, then reset form
+    await new Promise(r => setTimeout(r, 1000));
+    loadEntryForm();
   } catch (e) {
     toast("❌ " + e.message, true);
+    if (btn) { btn.innerHTML = "❌ Failed — Tap to retry"; btn.style.background = "var(--danger)"; btn.style.opacity = "1"; btn.disabled = false; }
   } finally {
     _submitting = false;
   }
