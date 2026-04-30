@@ -328,12 +328,26 @@ async function updateFundBalance() {
   if (!bar) return;
   bar.innerHTML = '<div style="text-align:center;padding:8px;font-size:.75em;color:#999">Updating balance...</div>';
   try {
-    const recon = await api("/api/funds/reconciliation" + (CURRENT_SITE ? "?site_id=" + CURRENT_SITE : ""));
-    if (recon.total_given > 0) {
-      const bal = recon.total_balance;
+    // Get funds given to THIS user for the current site
+    const myMobile = USER?.mobile || "";
+    let fundsUrl = "/api/funds?";
+    if (CURRENT_SITE) fundsUrl += "site_id=" + CURRENT_SITE + "&";
+    if (myMobile) fundsUrl += "engineer_mobile=" + myMobile;
+    const myFunds = await api(fundsUrl);
+    const totalGiven = myFunds.reduce((s, f) => s + Number(f.amount), 0);
+
+    // Get MY entries for the current site (already filtered by user on backend for engineers)
+    let totalSpent = 0;
+    if (CURRENT_SITE) {
+      const myEntries = await api("/api/entries/" + CURRENT_SITE);
+      totalSpent = myEntries.reduce((s, e) => s + Number(e.amount), 0);
+    }
+
+    const bal = totalGiven - totalSpent;
+    if (totalGiven > 0) {
       const color = bal >= 0 ? "var(--success)" : "var(--danger)";
       bar.innerHTML = `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;background:${bal >= 0 ? '#e8fbe8' : '#fde8e8'}">
-        <div><div style="font-size:.7em;color:#666">Fund Balance</div><div style="font-size:.65em;color:#999">Given: ₹${Number(recon.total_given).toLocaleString("en-IN")} · Spent: ₹${Number(recon.total_spent).toLocaleString("en-IN")}</div></div>
+        <div><div style="font-size:.7em;color:#666">Your Fund Balance</div><div style="font-size:.65em;color:#999">Given: ₹${Number(totalGiven).toLocaleString("en-IN")} · Spent: ₹${Number(totalSpent).toLocaleString("en-IN")}</div></div>
         <div style="font-size:1.2em;font-weight:800;color:${color}">₹${Number(bal).toLocaleString("en-IN")}</div>
       </div>`;
     } else {
