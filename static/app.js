@@ -685,13 +685,13 @@ async function loadAdmin() {
   let html = `
     <div class="card">
       <h3>👑 Admin Panel — Welkin Builders Infrastructure Ltd</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        <button class="btn btn-primary btn-sm" onclick="showCreateSite()">📍 New Site</button>
-        <button class="btn btn-outline btn-sm" onclick="showCreateUser()">👤 Add Engineer</button>
-        <button class="btn btn-outline btn-sm" onclick="showReleaseFund()">💰 Release Fund</button>
-        <button class="btn btn-outline btn-sm" onclick="showFundRecon()">📊 Fund Recon</button>
-        <button class="btn btn-outline btn-sm" onclick="detectNewSheets()">📄 Detect Sheets</button>
-        <button class="btn btn-outline btn-sm" onclick="api('/api/cache/clear',{method:'POST'}).then(()=>{toast('Cache cleared');loadAdmin()})">🔄 Refresh</button>
+      <div id="admin-btns" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button class="btn btn-outline btn-sm admin-action" onclick="adminAction(this,'showCreateSite')">📍 New Site</button>
+        <button class="btn btn-outline btn-sm admin-action" onclick="adminAction(this,'showCreateUser')">👤 Add Engineer</button>
+        <button class="btn btn-outline btn-sm admin-action" onclick="adminAction(this,'showReleaseFund')">💰 Release Fund</button>
+        <button class="btn btn-outline btn-sm admin-action" onclick="adminAction(this,'showFundRecon')">📊 Fund Recon</button>
+        <button class="btn btn-outline btn-sm admin-action" onclick="adminAction(this,'detectNewSheets')">📄 Detect Sheets</button>
+        <button class="btn btn-outline btn-sm admin-action" onclick="adminAction(this,'doRefresh')">🔄 Refresh</button>
       </div>
     </div>
     <div id="admin-content"></div>`;
@@ -753,6 +753,22 @@ async function loadAdmin() {
   } catch (e) {}
 
   s.innerHTML = html;
+}
+
+function adminAction(btn, fnName) {
+  // Highlight the clicked button, reset others
+  document.querySelectorAll(".admin-action").forEach(b => {
+    b.classList.remove("btn-primary");
+    b.classList.add("btn-outline");
+  });
+  btn.classList.remove("btn-outline");
+  btn.classList.add("btn-primary");
+  // Call the function
+  if (fnName === "doRefresh") {
+    api("/api/cache/clear", { method: "POST" }).then(() => { toast("Cache cleared"); loadAdmin(); });
+  } else {
+    window[fnName]();
+  }
 }
 
 function selectSite(siteId, siteName) {
