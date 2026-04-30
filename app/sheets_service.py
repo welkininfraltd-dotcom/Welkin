@@ -33,7 +33,7 @@ HEADER_ROW = [
     "Particulars / Material Detail", "Qty", "Unit", "Rate",
     "Amount", "Ref Ledger", "Status", "Entered By",
     "Entry ID", "Payment Mode", "Remarks", "Invoice URL",
-    "Timestamp", "Admin Remarks",
+    "Timestamp", "Admin Remarks", "Batch ID",
 ]
 
 META_SHEETS = {
@@ -319,11 +319,11 @@ def _get_entry_worksheet(site_id: str) -> tuple[gspread.Worksheet, dict]:
     return ws, site
 
 
-def add_entry(site_id: str, entry: dict, entered_by: str) -> dict:
+def add_entry(site_id: str, entry: dict, entered_by: str, batch_id: str = "") -> dict:
     """Append a new cash entry row and return the saved record."""
     ws, site = _get_entry_worksheet(site_id)
     all_vals = ws.get_all_values()
-    next_in_no = len(all_vals)  # row count minus header = serial number
+    next_in_no = len(all_vals)
 
     now = datetime.now(timezone.utc).isoformat()
     entry_id = f"{site_id}-{next_in_no}-{datetime.now(timezone.utc).strftime('%y%m%d%H%M%S')}"
@@ -332,7 +332,7 @@ def add_entry(site_id: str, entry: dict, entered_by: str) -> dict:
         next_in_no,                          # A: In No
         entry["entry_date"],                 # B: Date
         entry.get("bill_no", "Nil"),         # C: Bill No.
-        "",                                  # D: V.No (auto later)
+        "",                                  # D: V.No
         entry["party_name"],                 # E: Name of Party
         entry["item_description"],           # F: Particulars
         entry["quantity"],                   # G: Qty
@@ -345,13 +345,14 @@ def add_entry(site_id: str, entry: dict, entered_by: str) -> dict:
         entry_id,                            # N: Entry ID
         entry.get("payment_mode", "Cash"),   # O: Payment Mode
         entry.get("remarks", ""),            # P: Remarks
-        "",                                  # Q: Invoice URL (set later)
+        "",                                  # Q: Invoice URL
         now,                                 # R: Timestamp
         "",                                  # S: Admin Remarks
+        batch_id,                            # T: Batch ID
     ]
     ws.append_row(row, value_input_option="RAW")
     _cache_clear(f"entries:{site_id}")
-    logger.info("Added entry %s to site %s", entry_id, site_id)
+    logger.info("Added entry %s batch=%s to site %s", entry_id, batch_id, site_id)
 
     return {
         "row_number": next_in_no + 1,
@@ -372,6 +373,7 @@ def add_entry(site_id: str, entry: dict, entered_by: str) -> dict:
         "status": "Pending",
         "invoice_url": "",
         "timestamp": now,
+        "batch_id": batch_id,
     }
 
 
@@ -428,6 +430,7 @@ def _row_to_entry(rec: dict, row_num: int, site_id: str) -> dict:
         "status": rec.get("Status", "Pending"),
         "invoice_url": rec.get("Invoice URL", ""),
         "timestamp": rec.get("Timestamp", ""),
+        "batch_id": rec.get("Batch ID", ""),
     }
 
 

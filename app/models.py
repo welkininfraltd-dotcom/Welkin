@@ -109,6 +109,7 @@ class CashEntryOut(BaseModel):
     status: EntryStatus = EntryStatus.pending
     invoice_url: Optional[str] = None
     timestamp: str
+    batch_id: Optional[str] = ""
 
 
 # ── Reconciliation ─────────────────────────────────────────────────

@@ -495,6 +495,8 @@ async function submitEntry() {
 
   try {
     let lastResult = null;
+    // Generate batch ID to group all line items
+    const batchId = "B-" + Date.now().toString(36).toUpperCase();
     for (const li of lineItems) {
       const body = {
         ...commonData,
@@ -504,7 +506,7 @@ async function submitEntry() {
         rate: li.rate,
         amount: li.amount,
       };
-      lastResult = await api(`/api/entries/${targetSite}`, { method: "POST", body });
+      lastResult = await api(`/api/entries/${targetSite}?batch_id=${batchId}`, { method: "POST", body });
     }
 
     api("/api/cache/clear", { method: "POST" }).catch(() => {});
@@ -556,18 +558,40 @@ async function loadHistory(statusFilter) {
     } else {
       html += '<div class="card" id="history-list">';
       window._historyEntries = entries;
+      // Group by batch_id for display
+      let shownBatches = new Set();
       for (let i = 0; i < entries.length; i++) {
         const e = entries[i];
-        html += `<div class="entry-row" style="cursor:pointer" onclick="showEntryDetail(${i})" data-search="${(e.item_description + ' ' + e.party_name + ' ' + e.amount).toLowerCase()}">
-          <div class="entry-left">
-            <div class="item-name">${e.item_description} × ${e.quantity} ${e.unit}</div>
-            <div class="item-meta">${e.party_name} · ${e.bill_no} <span class="status-badge status-${e.status}">${e.status}</span></div>
-          </div>
-          <div class="entry-right">
-            <div class="amount">₹${Number(e.amount).toLocaleString("en-IN")}</div>
-            <div class="date">${e.entry_date}${e.invoice_url ? ' 📎' : ''}</div>
-          </div>
-        </div>`;
+        const bid = e.batch_id || "";
+        // If this entry has a batch, show grouped
+        if (bid && !shownBatches.has(bid)) {
+          shownBatches.add(bid);
+          const batchItems = entries.filter(x => x.batch_id === bid);
+          const batchTotal = batchItems.reduce((s, x) => s + Number(x.amount), 0);
+          const itemNames = batchItems.map(x => x.item_description).join(", ");
+          html += `<div class="entry-row" style="cursor:pointer" onclick="showBatchDetail('${bid}')" data-search="${(itemNames + ' ' + e.party_name + ' ' + batchTotal).toLowerCase()}">
+            <div class="entry-left">
+              <div class="item-name">${batchItems.length} items: ${itemNames.length > 40 ? itemNames.substring(0, 40) + '...' : itemNames}</div>
+              <div class="item-meta">${e.party_name} · ${e.bill_no} · ${e.payment_mode} <span class="status-badge status-${e.status}">${e.status}</span></div>
+            </div>
+            <div class="entry-right">
+              <div class="amount">₹${Number(batchTotal).toLocaleString("en-IN")}</div>
+              <div class="date">${e.entry_date}${e.invoice_url ? ' 📎' : ''}</div>
+            </div>
+          </div>`;
+        } else if (!bid) {
+          // Single entry (no batch)
+          html += `<div class="entry-row" style="cursor:pointer" onclick="showEntryDetail(${i})" data-search="${(e.item_description + ' ' + e.party_name + ' ' + e.amount).toLowerCase()}">
+            <div class="entry-left">
+              <div class="item-name">${e.item_description} × ${e.quantity} ${e.unit}</div>
+              <div class="item-meta">${e.party_name} · ${e.bill_no} <span class="status-badge status-${e.status}">${e.status}</span></div>
+            </div>
+            <div class="entry-right">
+              <div class="amount">₹${Number(e.amount).toLocaleString("en-IN")}</div>
+              <div class="date">${e.entry_date}${e.invoice_url ? ' 📎' : ''}</div>
+            </div>
+          </div>`;
+        }
       }
       html += "</div>";
     }
@@ -585,6 +609,74 @@ function filterHistory() {
 }
 
 // ── Entry Detail View ─────────────────────────────────────────────
+function showBatchDetail(batchId) {
+  const entries = (window._historyEntries || []).filter(e => e.batch_id === batchId);
+  if (entries.length === 0) return;
+  const s = document.getElementById("screen-history");
+  const e0 = entries[0];
+  const isAdmin = USER && (USER.role === "admin" || USER.role === "Role.admin");
+  const batchTotal = entries.reduce((s, e) => s + Number(e.amount), 0);
+
+  let html = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="margin:0">📋 Bill Detail (${entries.length} items)</h3>
+      <button class="btn btn-outline btn-sm" onclick="loadHistory()">← Back</button>
+    </div>
+    <table style="width:100%;font-size:.82em;border-collapse:collapse">
+      <tr><td style="padding:4px 0;color:#888">Date</td><td style="font-weight:600">${e0.entry_date}</td></tr>
+      <tr><td style="padding:4px 0;color:#888">Bill No.</td><td style="font-weight:600">${e0.bill_no}</td></tr>
+      <tr><td style="padding:4px 0;color:#888">Vendor</td><td style="font-weight:600">${e0.party_name}</td></tr>
+      <tr><td style="padding:4px 0;color:#888">Payment</td><td>${e0.payment_mode}</td></tr>
+      <tr><td style="padding:4px 0;color:#888">By</td><td>${e0.entered_by}</td></tr>
+      <tr><td style="padding:4px 0;color:#888">Status</td><td><span class="status-badge status-${e0.status}">${e0.status}</span></td></tr>
+    </table>
+  </div>
+  <div class="card"><h3>📦 Line Items</h3>`;
+
+  for (const e of entries) {
+    html += `<div class="entry-row">
+      <div class="entry-left">
+        <div class="item-name">${e.item_description}</div>
+        <div class="item-meta">${e.quantity} ${e.unit} × ₹${Number(e.rate).toLocaleString("en-IN")}</div>
+      </div>
+      <div class="entry-right"><div class="amount">₹${Number(e.amount).toLocaleString("en-IN")}</div></div>
+    </div>`;
+  }
+  html += `<div style="border-top:2px solid var(--primary);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between">
+    <span style="font-weight:700">Total</span>
+    <span style="font-weight:800;color:var(--primary);font-size:1.1em">₹${Number(batchTotal).toLocaleString("en-IN")}</span>
+  </div></div>`;
+
+  // Admin approve/reject for pending batches
+  if (isAdmin && e0.status === "Pending") {
+    html += `<div class="card">
+      <h3>✅ Approve / Reject Batch</h3>
+      <div class="fg"><label>Admin Remarks</label><input id="batch-remarks" placeholder="Optional remarks"></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-success" onclick="reconcileBatch('${e0.site_id}','${batchId}','Approved')">✅ Approve All</button>
+        <button class="btn btn-danger" onclick="reconcileBatch('${e0.site_id}','${batchId}','Rejected')">❌ Reject All</button>
+      </div>
+    </div>`;
+  }
+
+  s.innerHTML = html;
+}
+
+async function reconcileBatch(siteId, batchId, action) {
+  const remarks = document.getElementById("batch-remarks")?.value || "";
+  const entries = (window._historyEntries || []).filter(e => e.batch_id === batchId);
+  try {
+    for (const e of entries) {
+      await api(`/api/reconcile/${siteId}`, {
+        method: "POST", body: { entry_id: e.entry_id, action, admin_remarks: remarks },
+      });
+    }
+    toast(`${action === "Approved" ? "✅" : "❌"} ${entries.length} items ${action}`);
+    api("/api/cache/clear", { method: "POST" }).catch(() => {});
+    loadHistory();
+  } catch (e) { toast("Error: " + e.message, true); }
+}
+
 function showEntryDetail(idx) {
   const e = window._historyEntries?.[idx];
   if (!e) return;

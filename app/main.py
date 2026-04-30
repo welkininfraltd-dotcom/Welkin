@@ -208,9 +208,13 @@ async def clear_cache(user: dict = Depends(get_current_user)):
 # ═══════════════════════════════════════════════════════════════════
 
 @app.post("/api/entries/{site_id}", response_model=CashEntryOut)
-async def create_entry(site_id: str, body: CashEntryCreate, user: dict = Depends(get_current_user)):
-    """Create a new cash entry. Admin entries are auto-approved."""
-    # Site engineers can only post to their assigned sites
+async def create_entry(
+    site_id: str, body: CashEntryCreate,
+    batch_id: str = Query(""),
+    user: dict = Depends(get_current_user),
+):
+    """Create a new cash entry. Admin entries are auto-approved.
+    Pass batch_id to group multiple line items from the same submission."""
     if user.get("role") == Role.site_engineer:
         user_sites = [s.strip() for s in str(user.get("site_ids", "")).split(",") if s.strip()]
         if user_sites and site_id not in user_sites:
@@ -218,15 +222,13 @@ async def create_entry(site_id: str, body: CashEntryCreate, user: dict = Depends
 
     entry_data = body.model_dump()
     entry_data["entry_date"] = body.entry_date.isoformat()
-    result = sheets_service.add_entry(site_id, entry_data, entered_by=user["name"])
+    result = sheets_service.add_entry(site_id, entry_data, entered_by=user["name"], batch_id=batch_id)
 
-    # Admin entries are auto-approved
     is_admin = user.get("role") in ("admin", "Role.admin")
     if is_admin:
         sheets_service.update_entry_status(site_id, result["entry_id"], "Approved", "Auto-approved (admin)")
         result["status"] = "Approved"
     else:
-        # Notify admin about new entry from site engineer
         _notify_admin(
             f"New entry by {user['name']} at {site_id}: {body.item_description} "
             f"₹{body.amount:,.0f} to {body.party_name}",
