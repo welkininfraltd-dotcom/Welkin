@@ -981,6 +981,9 @@ async function showBatchForApproval(siteId, batchKey) {
     const total = items.reduce((s, x) => s + Number(x.amount), 0);
     const hasInvoice = items.some(x => x.invoice_url);
 
+    // Store items for editing
+    window._approvalItems = items;
+
     let html = `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <h3 style="margin:0">📋 Invoice for Approval</h3>
@@ -990,28 +993,30 @@ async function showBatchForApproval(siteId, batchKey) {
         <tr><td style="padding:5px 0;color:#888;width:30%">Date</td><td style="font-weight:600">${e0.entry_date}</td></tr>
         <tr><td style="padding:5px 0;color:#888">Bill No.</td><td style="font-weight:600">${e0.bill_no}</td></tr>
         <tr><td style="padding:5px 0;color:#888">Vendor</td><td style="font-weight:600">${e0.party_name}</td></tr>
-        <tr><td style="padding:5px 0;color:#888">Payment</td><td>${e0.payment_mode}</td></tr>
+        <tr><td style="padding:5px 0;color:#888">Payment</td><td><select id="edit-payment" style="padding:4px;font-size:.9em">${(ITEMS?.payment_modes || ["Cash","UPI","Bank Transfer","Challan","Credit","HO (Head Office)"]).map(m => `<option ${m === e0.payment_mode ? 'selected' : ''}>${m}</option>`).join("")}</select></td></tr>
         <tr><td style="padding:5px 0;color:#888">Entered By</td><td>${e0.entered_by}</td></tr>
         <tr><td style="padding:5px 0;color:#888">Site</td><td>${siteId}</td></tr>
       </table>
     </div>
 
     <div class="card">
-      <h3>📦 Items (${items.length})</h3>`;
+      <h3>📦 Edit Items (${items.length})</h3>`;
 
-    for (const item of items) {
-      html += `<div class="entry-row">
-        <div class="entry-left">
-          <div class="item-name">${item.item_description}</div>
-          <div class="item-meta">${item.quantity} ${item.unit} × ₹${Number(item.rate).toLocaleString("en-IN")}</div>
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      html += `<div style="padding:8px 0;border-bottom:1px solid #f0f0f0">
+        <div style="font-size:.85em;font-weight:600;margin-bottom:4px">${item.item_description}</div>
+        <div class="row3">
+          <div class="fg" style="margin:0"><label style="font-size:.65em">Qty</label><input type="number" class="edit-qty" data-idx="${i}" value="${item.quantity}" oninput="recalcInvoiceTotal()" style="padding:6px"></div>
+          <div class="fg" style="margin:0"><label style="font-size:.65em">Rate ₹</label><input type="number" class="edit-rate" data-idx="${i}" value="${item.rate}" oninput="recalcInvoiceTotal()" style="padding:6px"></div>
+          <div class="fg" style="margin:0"><label style="font-size:.65em">Amount</label><input type="number" class="edit-amt" data-idx="${i}" value="${item.amount}" style="padding:6px;font-weight:700" readonly></div>
         </div>
-        <div class="entry-right"><div class="amount">₹${Number(item.amount).toLocaleString("en-IN")}</div></div>
       </div>`;
     }
 
-    html += `<div style="border-top:2px solid var(--primary);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between">
+    html += `<div id="invoice-total-bar" style="border-top:2px solid var(--primary);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between">
       <span style="font-weight:700;font-size:1em">Invoice Total</span>
-      <span style="font-weight:800;color:var(--primary);font-size:1.2em">₹${Number(total).toLocaleString("en-IN")}</span>
+      <span style="font-weight:800;color:var(--primary);font-size:1.2em" id="invoice-edit-total">₹${Number(total).toLocaleString("en-IN")}</span>
     </div></div>`;
 
     // Invoice photo
@@ -1035,6 +1040,21 @@ async function showBatchForApproval(siteId, batchKey) {
 
     c.innerHTML = html;
   } catch (e) { c.innerHTML = `<div class="card"><p style="color:var(--danger)">${e.message}</p></div>`; }
+}
+
+function recalcInvoiceTotal() {
+  let total = 0;
+  document.querySelectorAll(".edit-qty").forEach(qEl => {
+    const idx = qEl.dataset.idx;
+    const q = parseFloat(qEl.value) || 0;
+    const r = parseFloat(document.querySelector(`.edit-rate[data-idx="${idx}"]`)?.value) || 0;
+    const amt = q * r;
+    total += amt;
+    const amtEl = document.querySelector(`.edit-amt[data-idx="${idx}"]`);
+    if (amtEl) amtEl.value = amt;
+  });
+  const totalEl = document.getElementById("invoice-edit-total");
+  if (totalEl) totalEl.textContent = "₹ " + total.toLocaleString("en-IN");
 }
 
 async function approveBatch(siteId, batchKey, action) {
