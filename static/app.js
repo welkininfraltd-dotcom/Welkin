@@ -922,34 +922,135 @@ async function loadAdmin() {
     html += "</div>";
   } catch (e) {}
 
-  // Reconciliation
+  // Reconciliation — group by batch (invoice level)
   try {
     const sites = await api("/api/sites");
     let pendingHtml = "";
     let pendingCount = 0;
     for (const site of sites) {
+      if (site.name && site.name.startsWith("[CLOSED]")) continue;
       const entries = await api(`/api/entries/${site.site_id}?status=Pending`);
+      if (entries.length === 0) continue;
+
+      // Group by batch_id (or entry_id for single items)
+      const batches = {};
       for (const e of entries) {
+        const key = e.batch_id || e.entry_id;
+        if (!batches[key]) batches[key] = { items: [], site };
+        batches[key].items.push(e);
+      }
+
+      for (const [batchKey, batch] of Object.entries(batches)) {
         pendingCount++;
-        pendingHtml += `<div class="entry-row" style="flex-wrap:wrap">
+        const items = batch.items;
+        const e0 = items[0];
+        const total = items.reduce((s, x) => s + Number(x.amount), 0);
+        const itemNames = items.map(x => x.item_description).join(", ");
+        const shortItems = itemNames.length > 50 ? itemNames.substring(0, 50) + "..." : itemNames;
+
+        pendingHtml += `<div class="entry-row" style="flex-wrap:wrap;cursor:pointer" onclick="showBatchForApproval('${site.site_id}','${batchKey}')">
           <div class="entry-left" style="flex-basis:100%">
-            <div class="item-name">${e.item_description} × ${e.quantity} ${e.unit} — ₹${Number(e.amount).toLocaleString("en-IN")}</div>
-            <div class="item-meta">${e.party_name} · ${e.entered_by} · ${site.name} · ${e.entry_date} ${e.invoice_url ? '📎' : ''}</div>
+            <div class="item-name">${items.length > 1 ? items.length + ' items: ' : ''}${shortItems}</div>
+            <div class="item-meta">₹${Number(total).toLocaleString("en-IN")} · ${e0.party_name} · ${e0.entered_by} · ${site.name} · ${e0.entry_date}</div>
           </div>
           <div style="display:flex;gap:6px;margin-top:6px">
-            <button class="btn btn-success btn-sm" onclick="reconcile('${site.site_id}','${e.entry_id}','Approved')">✅ Approve</button>
-            <button class="btn btn-danger btn-sm" onclick="reconcile('${site.site_id}','${e.entry_id}','Rejected')">❌ Reject</button>
-            ${e.invoice_url ? `<a href="${e.invoice_url}" target="_blank" class="btn btn-outline btn-sm">📎 View</a>` : ''}
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();showBatchForApproval('${site.site_id}','${batchKey}')">📋 View Invoice</button>
           </div>
         </div>`;
       }
     }
-    html += `<div class="card"><h3>⏳ Pending Reconciliation (${pendingCount})</h3>`;
-    html += pendingCount ? pendingHtml : '<p style="font-size:.82em;color:#999">No pending entries</p>';
+    html += `<div class="card"><h3>⏳ Pending Invoices (${pendingCount})</h3>`;
+    html += pendingCount ? pendingHtml : '<p style="font-size:.82em;color:#999">No pending invoices</p>';
     html += "</div>";
   } catch (e) {}
 
   s.innerHTML = html;
+}
+
+async function showBatchForApproval(siteId, batchKey) {
+  const c = document.getElementById("admin-content");
+  c.innerHTML = '<div class="loader"><div style="font-size:2em;animation:pulse 1s infinite">🏗️</div><div class="loader-text">Loading invoice...</div></div>';
+  try {
+    const allEntries = await api(`/api/entries/${siteId}?status=Pending`);
+    // Find entries matching this batch
+    let items = allEntries.filter(e => (e.batch_id || e.entry_id) === batchKey);
+    if (items.length === 0) items = allEntries.filter(e => e.entry_id === batchKey);
+    if (items.length === 0) { c.innerHTML = '<div class="card"><p>Invoice not found</p></div>'; return; }
+
+    const e0 = items[0];
+    const total = items.reduce((s, x) => s + Number(x.amount), 0);
+    const hasInvoice = items.some(x => x.invoice_url);
+
+    let html = `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 style="margin:0">📋 Invoice for Approval</h3>
+        <button class="btn btn-outline btn-sm" onclick="loadAdmin()">← Back</button>
+      </div>
+      <table style="width:100%;font-size:.85em;border-collapse:collapse">
+        <tr><td style="padding:5px 0;color:#888;width:30%">Date</td><td style="font-weight:600">${e0.entry_date}</td></tr>
+        <tr><td style="padding:5px 0;color:#888">Bill No.</td><td style="font-weight:600">${e0.bill_no}</td></tr>
+        <tr><td style="padding:5px 0;color:#888">Vendor</td><td style="font-weight:600">${e0.party_name}</td></tr>
+        <tr><td style="padding:5px 0;color:#888">Payment</td><td>${e0.payment_mode}</td></tr>
+        <tr><td style="padding:5px 0;color:#888">Entered By</td><td>${e0.entered_by}</td></tr>
+        <tr><td style="padding:5px 0;color:#888">Site</td><td>${siteId}</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>📦 Items (${items.length})</h3>`;
+
+    for (const item of items) {
+      html += `<div class="entry-row">
+        <div class="entry-left">
+          <div class="item-name">${item.item_description}</div>
+          <div class="item-meta">${item.quantity} ${item.unit} × ₹${Number(item.rate).toLocaleString("en-IN")}</div>
+        </div>
+        <div class="entry-right"><div class="amount">₹${Number(item.amount).toLocaleString("en-IN")}</div></div>
+      </div>`;
+    }
+
+    html += `<div style="border-top:2px solid var(--primary);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between">
+      <span style="font-weight:700;font-size:1em">Invoice Total</span>
+      <span style="font-weight:800;color:var(--primary);font-size:1.2em">₹${Number(total).toLocaleString("en-IN")}</span>
+    </div></div>`;
+
+    // Invoice photo
+    if (hasInvoice) {
+      const invoiceUrl = items.find(x => x.invoice_url)?.invoice_url;
+      html += `<div class="card">
+        <h3>📸 Invoice Photo</h3>
+        <img src="${invoiceUrl}" style="width:100%;border-radius:8px;max-height:400px;object-fit:contain" onerror="this.parentElement.innerHTML='<p style=color:#999>Could not load image</p>'">
+        <a href="${invoiceUrl}" target="_blank" class="btn btn-outline btn-sm" style="margin-top:8px;display:block;text-align:center">Open Full Size</a>
+      </div>`;
+    }
+
+    // Approve / Reject
+    html += `<div class="card">
+      <div class="fg"><label>Admin Remarks</label><input id="approval-remarks" placeholder="Optional remarks"></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-success" onclick="animatedSubmit(this, ()=>approveBatch('${siteId}','${batchKey}','Approved'))">✅ Approve Invoice</button>
+        <button class="btn btn-danger" onclick="animatedSubmit(this, ()=>approveBatch('${siteId}','${batchKey}','Rejected'))">❌ Reject Invoice</button>
+      </div>
+    </div>`;
+
+    c.innerHTML = html;
+  } catch (e) { c.innerHTML = `<div class="card"><p style="color:var(--danger)">${e.message}</p></div>`; }
+}
+
+async function approveBatch(siteId, batchKey, action) {
+  const remarks = document.getElementById("approval-remarks")?.value || "";
+  const allEntries = await api(`/api/entries/${siteId}?status=Pending`);
+  let items = allEntries.filter(e => (e.batch_id || e.entry_id) === batchKey);
+  if (items.length === 0) items = allEntries.filter(e => e.entry_id === batchKey);
+
+  for (const e of items) {
+    await api(`/api/reconcile/${siteId}`, {
+      method: "POST", body: { entry_id: e.entry_id, action, admin_remarks: remarks },
+    });
+  }
+  api("/api/cache/clear", { method: "POST" }).catch(() => {});
+  toast(`${action === "Approved" ? "✅" : "❌"} Invoice ${action} (${items.length} items)`);
+  loadAdmin();
 }
 
 function adminAction(btn, fnName) {
