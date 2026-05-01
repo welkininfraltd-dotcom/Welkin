@@ -434,9 +434,14 @@ async function updateFundBalance() {
     let totalSpent = 0;
     if (CURRENT_SITE) {
       const myEntries = await api("/api/entries/" + CURRENT_SITE);
-      // Only count cash-deducting entries (exclude HO and Challan)
+      // Only count cash-deducting entries (exclude HO payment mode, Challan, and HO vendors)
       totalSpent = myEntries
-        .filter(e => e.payment_mode !== "HO (Head Office)" && e.payment_mode !== "Challan")
+        .filter(e => {
+          if (e.payment_mode === "HO (Head Office)" || e.payment_mode === "Challan") return false;
+          const vendor = (e.party_name || "").toUpperCase();
+          if (vendor.startsWith("HO ") || vendor.includes(" HO ") || vendor === "HO") return false;
+          return true;
+        })
         .reduce((s, e) => s + Number(e.amount), 0);
     }
 
