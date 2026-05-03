@@ -1021,9 +1021,11 @@ async function showBatchForApproval(siteId, batchKey) {
         <div style="font-size:.85em;font-weight:600;margin-bottom:4px">${item.item_description}</div>
         <div class="row3">
           <div class="fg" style="margin:0"><label style="font-size:.65em">Qty</label><input type="number" class="edit-qty" data-idx="${i}" value="${item.quantity}" oninput="recalcInvoiceTotal()" style="padding:6px"></div>
-          <div class="fg" style="margin:0"><label style="font-size:.65em">Rate ₹</label><input type="number" class="edit-rate" data-idx="${i}" value="${item.rate}" oninput="recalcInvoiceTotal()" style="padding:6px"></div>
-          <div class="fg" style="margin:0"><label style="font-size:.65em">Amount</label><input type="number" class="edit-amt" data-idx="${i}" value="${item.amount}" style="padding:6px;font-weight:700" readonly></div>
+          <div class="fg" style="margin:0"><label style="font-size:.65em">UOM</label><input class="edit-unit" data-idx="${i}" value="${item.unit}" style="padding:6px;font-size:.85em" readonly></div>
+          <div class="fg" style="margin:0"><label style="font-size:.65em">Unit Price ₹</label><input type="number" class="edit-rate" data-idx="${i}" value="${item.rate}" oninput="recalcInvoiceTotal()" style="padding:6px"></div>
         </div>
+        <div style="text-align:right;font-size:.78em;color:var(--primary);font-weight:700" class="edit-subtotal">= ₹${Number(item.amount).toLocaleString("en-IN")}</div>
+        <input type="hidden" class="edit-amt" data-idx="${i}" value="${item.amount}">
       </div>`;
     }
 
@@ -1066,6 +1068,8 @@ function recalcInvoiceTotal() {
     total += amt;
     const amtEl = document.querySelector(`.edit-amt[data-idx="${idx}"]`);
     if (amtEl) amtEl.value = amt;
+    const subEl = qEl.closest("div[style]")?.parentElement?.querySelector(".edit-subtotal");
+    if (subEl) subEl.textContent = "= ₹" + amt.toLocaleString("en-IN");
   });
   const totalEl = document.getElementById("invoice-edit-total");
   if (totalEl) totalEl.textContent = "₹ " + total.toLocaleString("en-IN");
