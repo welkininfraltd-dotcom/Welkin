@@ -259,6 +259,25 @@ async def get_entries(
 #  RECONCILIATION (admin only)
 # ═══════════════════════════════════════════════════════════════════
 
+@app.put("/api/entries/{site_id}/{entry_id}")
+async def edit_entry(site_id: str, entry_id: str,
+                     quantity: float = Form(None), rate: float = Form(None),
+                     amount: float = Form(None), payment_mode: str = Form(None),
+                     admin: dict = Depends(require_admin)):
+    """Admin edits entry fields (qty, rate, amount, payment_mode)."""
+    fields = {}
+    if quantity is not None: fields["quantity"] = quantity
+    if rate is not None: fields["rate"] = rate
+    if amount is not None: fields["amount"] = amount
+    if payment_mode is not None: fields["payment_mode"] = payment_mode
+    if not fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    ok = sheets_service.update_entry_fields(site_id, entry_id, fields)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"success": True, "entry_id": entry_id, "updated": fields}
+
+
 @app.post("/api/reconcile/{site_id}")
 async def reconcile_entry(site_id: str, body: ReconcileAction, admin: dict = Depends(require_admin)):
     """Admin approves or rejects a cash entry."""

@@ -732,3 +732,30 @@ def get_fund_summary(site_id: str | None = None) -> dict:
         fund_by_site_eng[key] = fund_by_site_eng.get(key, 0) + float(f.get("amount", 0))
 
     return {"fund_releases": funds, "totals_by_site_engineer": fund_by_site_eng}
+
+
+def update_entry_fields(site_id: str, entry_id: str, fields: dict) -> bool:
+    """Update specific fields of an entry (qty, rate, amount, payment_mode)."""
+    ws, _ = _get_entry_worksheet(site_id)
+    all_vals = ws.get_all_values()
+    headers = all_vals[0]
+    col_map = {h: i for i, h in enumerate(headers)}
+
+    entry_id_col = col_map.get("Entry ID")
+    if entry_id_col is None:
+        return False
+
+    for idx, row in enumerate(all_vals[1:], start=2):
+        if entry_id_col < len(row) and row[entry_id_col] == entry_id:
+            if "quantity" in fields and "Qty" in col_map:
+                ws.update_cell(idx, col_map["Qty"] + 1, str(fields["quantity"]))
+            if "rate" in fields and "Rate" in col_map:
+                ws.update_cell(idx, col_map["Rate"] + 1, str(fields["rate"]))
+            if "amount" in fields and "Amount" in col_map:
+                ws.update_cell(idx, col_map["Amount"] + 1, str(fields["amount"]))
+            if "payment_mode" in fields and "Payment Mode" in col_map:
+                ws.update_cell(idx, col_map["Payment Mode"] + 1, fields["payment_mode"])
+            _cache_clear(f"entries:{site_id}")
+            logger.info("Updated entry fields %s: %s", entry_id, fields)
+            return True
+    return False

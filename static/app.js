@@ -1034,12 +1034,13 @@ async function showBatchForApproval(siteId, batchKey) {
       </div>`;
     }
 
-    // Approve / Reject
+    // Approve / Reject (with save)
     html += `<div class="card">
       <div class="fg"><label>Admin Remarks</label><input id="approval-remarks" placeholder="Optional remarks"></div>
+      <button class="btn btn-outline" onclick="animatedSubmit(this, ()=>saveInvoiceEdits('${siteId}','${batchKey}'))" style="margin-bottom:8px">💾 Save Changes Only</button>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-success" onclick="animatedSubmit(this, ()=>approveBatch('${siteId}','${batchKey}','Approved'))">✅ Approve Invoice</button>
-        <button class="btn btn-danger" onclick="animatedSubmit(this, ()=>approveBatch('${siteId}','${batchKey}','Rejected'))">❌ Reject Invoice</button>
+        <button class="btn btn-success" onclick="animatedSubmit(this, ()=>approveBatch('${siteId}','${batchKey}','Approved'))">✅ Save & Approve</button>
+        <button class="btn btn-danger" onclick="animatedSubmit(this, ()=>approveBatch('${siteId}','${batchKey}','Rejected'))">❌ Reject</button>
       </div>
     </div>`;
 
@@ -1062,19 +1063,75 @@ function recalcInvoiceTotal() {
   if (totalEl) totalEl.textContent = "₹ " + total.toLocaleString("en-IN");
 }
 
+async function saveInvoiceEdits(siteId, batchKey) {
+  const items = window._approvalItems || [];
+  for (let i = 0; i < items.length; i++) {
+    const qtyEl = document.querySelector(`.edit-qty[data-idx="${i}"]`);
+    const rateEl = document.querySelector(`.edit-rate[data-idx="${i}"]`);
+    const amtEl = document.querySelector(`.edit-amt[data-idx="${i}"]`);
+    const newQty = parseFloat(qtyEl?.value) || 0;
+    const newRate = parseFloat(rateEl?.value) || 0;
+    const newAmt = parseFloat(amtEl?.value) || newQty * newRate;
+    const fd = new FormData();
+    fd.append("quantity", newQty);
+    fd.append("rate", newRate);
+    fd.append("amount", newAmt);
+    const payEl = document.getElementById("edit-payment");
+    if (payEl) fd.append("payment_mode", payEl.value);
+    await api(`/api/entries/${siteId}/${items[i].entry_id}`, { method: "PUT", body: fd });
+  }
+  api("/api/cache/clear", { method: "POST" }).catch(() => {});
+  toast("✅ Changes saved!");
+}
+
 async function approveBatch(siteId, batchKey, action) {
   const remarks = document.getElementById("approval-remarks")?.value || "";
-  const allEntries = await api(`/api/entries/${siteId}?status=Pending`);
-  let items = allEntries.filter(e => (e.batch_id || e.entry_id) === batchKey);
-  if (items.length === 0) items = allEntries.filter(e => e.entry_id === batchKey);
+  const items = window._approvalItems || [];
 
-  for (const e of items) {
+  // Save any edits first
+  for (let i = 0; i < items.length; i++) {
+    const qtyEl = document.querySelector(`.edit-qty[data-idx="${i}"]`);
+    const rateEl = document.querySelector(`.edit-rate[data-idx="${i}"]`);
+    const amtEl = document.querySelector(`.edit-amt[data-idx="${i}"]`);
+    if (qtyEl && rateEl) {
+      const newQty = parseFloat(qtyEl.value) || 0;
+      const newRate = parseFloat(rateEl.value) || 0;
+      const newAmt = parseFloat(amtEl?.value) || newQty * newRate;
+      // Only update if changed
+      if (newQty != items[i].quantity || newRate != items[i].rate) {
+        const fd = new FormData();
+        fd.append("quantity", newQty);
+        fd.append("rate", newRate);
+        fd.append("amount", newAmt);
+        const payEl = document.getElementById("edit-payment");
+        if (payEl) fd.append("payment_mode", payEl.value);
+        await api(`/api/entries/${siteId}/${items[i].entry_id}`, { method: "PUT", body: fd });
+      }
+    }
+  }
+
+  // Also save payment mode change for all items
+  const payEl = document.getElementById("edit-payment");
+  if (payEl && items.length > 0 && payEl.value !== items[0].payment_mode) {
+    for (const item of items) {
+      const fd = new FormData();
+      fd.append("payment_mode", payEl.value);
+      await api(`/api/entries/${siteId}/${item.entry_id}`, { method: "PUT", body: fd });
+    }
+  }
+
+  // Now approve/reject
+  const allEntries = await api(`/api/entries/${siteId}?status=Pending`);
+  let batchItems = allEntries.filter(e => (e.batch_id || e.entry_id) === batchKey);
+  if (batchItems.length === 0) batchItems = allEntries.filter(e => e.entry_id === batchKey);
+
+  for (const e of batchItems) {
     await api(`/api/reconcile/${siteId}`, {
       method: "POST", body: { entry_id: e.entry_id, action, admin_remarks: remarks },
     });
   }
   api("/api/cache/clear", { method: "POST" }).catch(() => {});
-  toast(`${action === "Approved" ? "✅" : "❌"} Invoice ${action} (${items.length} items)`);
+  toast(`${action === "Approved" ? "✅" : "❌"} Invoice ${action} (${batchItems.length} items)`);
   loadAdmin();
 }
 
