@@ -1723,13 +1723,15 @@ async function loadNotifList() {
     const notifs = await api("/api/notifications");
     const el = document.getElementById("notif-list");
     if (!el) return;
-    if (notifs.length === 0) { el.innerHTML = '<p style="font-size:.82em;color:#999">No notifications</p>'; return; }
-    el.innerHTML = notifs.reverse().slice(0, 20).map(n => `
-      <div class="entry-row" style="opacity:${n.read ? '.6' : '1'}" onclick="markRead('${n.id}',this)">
-        <div class="entry-left"><div class="item-name" style="white-space:normal;font-size:.78em">${n.message}</div>
-        <div class="item-meta">${n.created_at.split("T")[0]}</div></div>
-      </div>`).join("");
-  } catch (e) { const el = document.getElementById("notif-list"); if (el) el.innerHTML = '<p style="color:var(--danger)">Failed to load</p>'; }
+    if (!notifs || notifs.length === 0) { el.innerHTML = '<p style="font-size:.82em;color:#999">No notifications</p>'; return; }
+    el.innerHTML = notifs.reverse().slice(0, 20).map(n => {
+      const dateStr = (n.created_at || "").split("T")[0] || "";
+      return `<div class="entry-row" style="opacity:${n.read ? '.6' : '1'}" onclick="markRead('${n.id}',this)">
+        <div class="entry-left"><div class="item-name" style="white-space:normal;font-size:.78em">${n.message || ""}</div>
+        <div class="item-meta">${dateStr}</div></div>
+      </div>`;
+    }).join("");
+  } catch (e) { console.error("Notif error:", e); const el = document.getElementById("notif-list"); if (el) el.innerHTML = '<p style="color:var(--danger)">Failed to load</p>'; }
 }
 
 async function markRead(id, el) {
