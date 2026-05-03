@@ -1132,14 +1132,11 @@ async function approveBatch(siteId, batchKey, action) {
     }
   }
 
-  // Now approve/reject
-  const allEntries = await api(`/api/entries/${siteId}?status=Pending`);
-  let batchItems = allEntries.filter(e => (e.batch_id || e.entry_id) === batchKey);
-  if (batchItems.length === 0) batchItems = allEntries.filter(e => e.entry_id === batchKey);
-
-  for (const e of batchItems) {
+  // Approve/reject ALL items from stored list (no re-fetch)
+  await api("/api/cache/clear", { method: "POST" });
+  for (const item of items) {
     await api(`/api/reconcile/${siteId}`, {
-      method: "POST", body: { entry_id: e.entry_id, action, admin_remarks: remarks },
+      method: "POST", body: { entry_id: item.entry_id, action, admin_remarks: remarks },
     });
   }
   api("/api/cache/clear", { method: "POST" }).catch(() => {});
