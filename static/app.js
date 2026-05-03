@@ -393,14 +393,16 @@ function getLineItems() {
   const items = [];
   document.querySelectorAll("#line-items-list > div").forEach(div => {
     const sel = div.querySelector(".li-item");
+    if (!sel) return;
     const itemName = sel.value === "__custom__"
       ? div.querySelector(".li-custom-name")?.value?.trim() || ""
       : sel.value;
     const qty = parseFloat(div.querySelector(".li-qty")?.value) || 0;
     const rate = parseFloat(div.querySelector(".li-rate")?.value) || 0;
     const unit = div.querySelector(".li-unit")?.value || "No.";
-    if (itemName && qty > 0) {
-      items.push({ item: itemName, qty, unit, rate, amount: qty * rate });
+    // Include item if it has a name (even if qty is 0, user might have forgotten)
+    if (itemName && itemName !== "" && itemName !== "-- Select Item --") {
+      items.push({ item: itemName, qty: qty || 1, unit, rate, amount: (qty || 1) * rate });
     }
   });
   return items;
@@ -477,6 +479,11 @@ async function submitEntry() {
   if (_submitting) return;
   const lineItems = getLineItems();
   if (lineItems.length === 0) { toast("Add at least one item with quantity", true); return; }
+
+  // Warn about items without qty
+  const allDivs = document.querySelectorAll("#line-items-list > div");
+  let skipped = allDivs.length - lineItems.length;
+  if (skipped > 0) toast(`⚠️ ${skipped} item(s) skipped (no item selected)`, true);
 
   const siteEl = document.getElementById("e-site");
   const targetSite = siteEl ? siteEl.value : CURRENT_SITE;
