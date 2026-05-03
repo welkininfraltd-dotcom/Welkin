@@ -94,12 +94,12 @@ function updateHeader() {
 function buildTabs() {
   const tabs = document.getElementById("nav-tabs");
   const isAdmin = USER && (USER.role === "admin" || USER.role === "Role.admin");
-  console.log("User role:", USER?.role, "isAdmin:", isAdmin);
   let html = `
     <div class="tab active" data-tab="entry"><span class="ico">📝</span>Entry</div>
     <div class="tab" data-tab="history"><span class="ico">📋</span>History</div>
     <div class="tab" data-tab="summary"><span class="ico">📊</span>Summary</div>`;
   if (isAdmin) {
+    html += `<div class="tab" data-tab="reports"><span class="ico">📈</span>Reports</div>`;
     html += `<div class="tab" data-tab="admin"><span class="ico">👑</span>Admin</div>`;
   }
   html += `<div class="tab" data-tab="more"><span class="ico">⚙️</span>More</div>`;
@@ -116,6 +116,7 @@ function switchTab(name) {
   if (name === "entry") loadEntryForm();
   else if (name === "history") loadHistory();
   else if (name === "summary") loadSummary();
+  else if (name === "reports") loadReports();
   else if (name === "admin") loadAdmin();
   else if (name === "more") loadMore();
 }
@@ -1725,6 +1726,196 @@ async function loadNotifList() {
 
 async function markRead(id, el) {
   try { await api(`/api/notifications/${id}/read`, { method: "POST" }); el.style.opacity = ".6"; } catch (e) {}
+}
+
+// ── REPORTS TAB (Admin Analytics) ─────────────────────────────────
+async function loadReports() {
+  const s = document.getElementById("screen-reports");
+  if (!s) return;
+  s.innerHTML = '<div class="loader"><div style="font-size:2em;animation:pulse 1s infinite">🏗️</div><div class="loader-text">Loading reports...</div></div>';
+
+  try {
+    const sites = await api("/api/sites");
+    let allEntries = [];
+    for (const site of sites) {
+      if (site.name && site.name.startsWith("[CLOSED]")) continue;
+      const entries = await api(`/api/entries/${site.site_id}`);
+      allEntries = allEntries.concat(entries.map(e => ({ ...e, site_name: site.name })));
+    }
+
+    let html = `<div class="card"><h3>📈 Reports & Analytics</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button class="btn btn-outline btn-sm" onclick="showMaterialReport()">📦 Material Usage</button>
+        <button class="btn btn-outline btn-sm" onclick="showDailyReport()">📅 Daily Spending</button>
+        <button class="btn btn-outline btn-sm" onclick="showSiteComparison()">📍 Site Comparison</button>
+        <button class="btn btn-outline btn-sm" onclick="showPriceAnomalies()">⚠️ Price Anomalies</button>
+      </div>
+    </div>
+    <div id="report-content"></div>`;
+
+    // Quick stats
+    const totalAmt = allEntries.reduce((s, e) => s + Number(e.amount), 0);
+    const thisMonth = allEntries.filter(e => {
+      const d = new Date(e.entry_date);
+      const now = new Date();
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const thisMonthAmt = thisMonth.reduce((s, e) => s + Number(e.amount), 0);
+
+    html += `<div class="card"><h3>📊 Quick Stats</h3>
+      <div class="stat-grid">
+        <div class="stat"><div class="val">${allEntries.length}</div><div class="lbl">Total Entries</div></div>
+        <div class="stat"><div class="val">₹${totalAmt >= 100000 ? (totalAmt/100000).toFixed(1)+'L' : (totalAmt/1000).toFixed(0)+'K'}</div><div class="lbl">All Time Spend</div></div>
+        <div class="stat"><div class="val">${thisMonth.length}</div><div class="lbl">This Month</div></div>
+        <div class="stat"><div class="val">₹${thisMonthAmt >= 100000 ? (thisMonthAmt/100000).toFixed(1)+'L' : (thisMonthAmt/1000).toFixed(0)+'K'}</div><div class="lbl">This Month ₹</div></div>
+      </div>
+    </div>`;
+
+    // Store for sub-reports
+    window._reportEntries = allEntries;
+    window._reportSites = sites;
+    s.innerHTML = html;
+  } catch (e) {
+    s.innerHTML = `<div class="card"><p style="color:var(--danger)">${e.message}</p></div>`;
+  }
+}
+
+function showMaterialReport() {
+  const entries = window._reportEntries || [];
+  const c = document.getElementById("report-content");
+  // Group by item
+  const items = {};
+  for (const e of entries) {
+    const name = e.item_description || "Unknown";
+    if (!items[name]) items[name] = { qty: 0, amount: 0, count: 0, rates: [], sites: new Set() };
+    items[name].qty += Number(e.quantity);
+    items[name].amount += Number(e.amount);
+    items[name].count++;
+    items[name].rates.push(Number(e.rate));
+    items[name].sites.add(e.site_id || "");
+  }
+  const sorted = Object.entries(items).sort((a, b) => b[1].amount - a[1].amount);
+
+  let html = '<div class="card"><h3>📦 Material Usage Report</h3><div class="search-box"><input id="mat-search" placeholder="Search material..." oninput="fuzzyFilter(\'.mat-row\',\'mat-search\')"></div>';
+  for (const [name, data] of sorted.slice(0, 50)) {
+    const avgRate = data.rates.length ? (data.rates.reduce((a,b)=>a+b,0) / data.rates.length).toFixed(0) : 0;
+    html += `<div class="entry-row mat-row" data-search="${name.toLowerCase()}">
+      <div class="entry-left">
+        <div class="item-name">${name}</div>
+        <div class="item-meta">${data.count} entries · Avg rate: ₹${avgRate} · Sites: ${[...data.sites].join(", ")}</div>
+      </div>
+      <div class="entry-right"><div class="amount">₹${Number(data.amount).toLocaleString("en-IN")}</div><div class="date">Qty: ${data.qty}</div></div>
+    </div>`;
+  }
+  html += '</div>';
+  c.innerHTML = html;
+}
+
+function showDailyReport() {
+  const entries = window._reportEntries || [];
+  const c = document.getElementById("report-content");
+  // Group by date
+  const days = {};
+  for (const e of entries) {
+    const d = e.entry_date || "Unknown";
+    if (!days[d]) days[d] = { amount: 0, count: 0 };
+    days[d].amount += Number(e.amount);
+    days[d].count++;
+  }
+  const sorted = Object.entries(days).sort((a, b) => b[0].localeCompare(a[0]));
+  const maxAmt = Math.max(...sorted.map(x => x[1].amount), 1);
+
+  let html = '<div class="card"><h3>📅 Daily Spending (last 30 days)</h3>';
+  for (const [date, data] of sorted.slice(0, 30)) {
+    const pct = (data.amount / maxAmt * 100).toFixed(0);
+    html += `<div style="margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;font-size:.78em"><span>${date} (${data.count})</span><span style="font-weight:700">₹${Number(data.amount).toLocaleString("en-IN")}</span></div>
+      <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }
+  html += '</div>';
+  c.innerHTML = html;
+}
+
+function showSiteComparison() {
+  const entries = window._reportEntries || [];
+  const sites = window._reportSites || [];
+  const c = document.getElementById("report-content");
+  // Group by site
+  const siteData = {};
+  for (const e of entries) {
+    const sid = e.site_id || "Unknown";
+    if (!siteData[sid]) siteData[sid] = { amount: 0, count: 0, engineers: new Set() };
+    siteData[sid].amount += Number(e.amount);
+    siteData[sid].count++;
+    siteData[sid].engineers.add(e.entered_by);
+  }
+  const maxAmt = Math.max(...Object.values(siteData).map(x => x.amount), 1);
+
+  let html = '<div class="card"><h3>📍 Site Comparison</h3>';
+  const colors = ["#1a7fb5","#e67e22","#27ae60","#8e44ad","#e74c3c"];
+  let ci = 0;
+  for (const [sid, data] of Object.entries(siteData).sort((a,b) => b[1].amount - a[1].amount)) {
+    const siteName = sites.find(s => s.site_id === sid)?.name || sid;
+    const pct = (data.amount / maxAmt * 100).toFixed(0);
+    html += `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:.82em"><span style="font-weight:600">${siteName}</span><span style="font-weight:700">₹${Number(data.amount).toLocaleString("en-IN")}</span></div>
+      <div style="font-size:.68em;color:#888">${data.count} entries · ${data.engineers.size} engineers</div>
+      <div class="bar"><div class="bar-fill" style="width:${pct}%;background:${colors[ci++%colors.length]}"></div></div>
+    </div>`;
+  }
+  html += '</div>';
+  c.innerHTML = html;
+}
+
+function showPriceAnomalies() {
+  const entries = window._reportEntries || [];
+  const c = document.getElementById("report-content");
+  // Find items with varying rates (potential fraud/price changes)
+  const itemRates = {};
+  for (const e of entries) {
+    const name = e.item_description || "";
+    if (!name || Number(e.rate) === 0) continue;
+    if (!itemRates[name]) itemRates[name] = [];
+    itemRates[name].push({ rate: Number(e.rate), date: e.entry_date, site: e.site_id, by: e.entered_by, vendor: e.party_name });
+  }
+
+  // Find items with >20% rate variation
+  const anomalies = [];
+  for (const [name, rates] of Object.entries(itemRates)) {
+    if (rates.length < 2) continue;
+    const values = rates.map(r => r.rate);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (min === 0) continue;
+    const variation = ((max - min) / min * 100).toFixed(0);
+    if (variation > 20) {
+      anomalies.push({ name, min, max, variation, count: rates.length, details: rates });
+    }
+  }
+  anomalies.sort((a, b) => b.variation - a.variation);
+
+  let html = '<div class="card"><h3>⚠️ Price Anomalies</h3>';
+  html += '<p style="font-size:.72em;color:#888;margin-bottom:10px">Items with >20% rate variation across entries (may indicate price changes or discrepancies)</p>';
+
+  if (anomalies.length === 0) {
+    html += '<p style="font-size:.82em;color:var(--success)">✅ No significant price anomalies found</p>';
+  } else {
+    for (const a of anomalies.slice(0, 20)) {
+      html += `<div class="entry-row" style="flex-wrap:wrap">
+        <div class="entry-left" style="flex-basis:100%">
+          <div class="item-name">⚠️ ${a.name}</div>
+          <div class="item-meta">Rate range: ₹${a.min} — ₹${a.max} (${a.variation}% variation) · ${a.count} entries</div>
+        </div>
+        <div style="font-size:.7em;color:#666;width:100%;margin-top:4px">`;
+      for (const d of a.details.slice(-5)) {
+        html += `<div>${d.date} · ₹${d.rate} · ${d.vendor} · ${d.site} · by ${d.by}</div>`;
+      }
+      html += `</div></div>`;
+    }
+  }
+  html += '</div>';
+  c.innerHTML = html;
 }
 
 // ── INIT & AUTO-UPDATE ────────────────────────────────────────────
