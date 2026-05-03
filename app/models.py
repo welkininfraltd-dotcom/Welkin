@@ -79,6 +79,7 @@ class SiteOut(BaseModel):
 class CashEntryCreate(BaseModel):
     entry_date: date
     bill_no: str = "Nil"
+    vehicle_no: str = ""
     party_name: str
     item_description: str
     quantity: float = Field(..., gt=0)

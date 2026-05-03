@@ -261,6 +261,7 @@ async function loadEntryForm() {
         <div class="fg"><label>Date</label><input type="date" id="e-date" value="${today}"></div>
         <div class="fg"><label>Bill / Challan No.</label><input id="e-bill" placeholder="SB-68 or Nil" value="Nil"></div>
       </div>
+      <div class="fg"><label>Vehicle No.</label><input id="e-vno" placeholder="e.g. MP09-AB-1234"></div>
       <div class="fg"><label>Party / Vendor</label>
         <select id="e-party" onchange="onVendorChange()"><option value="">Loading vendors...</option></select>
       </div>
@@ -500,6 +501,7 @@ async function submitEntry() {
   const commonData = {
     entry_date: document.getElementById("e-date").value,
     bill_no: document.getElementById("e-bill").value || "Nil",
+    vehicle_no: document.getElementById("e-vno")?.value?.trim() || "",
     party_name: document.getElementById("e-party").value.trim() || "Cash Purchase",
     payment_mode: document.getElementById("e-payment").value,
     ref_ledger: document.getElementById("e-ledger").value,

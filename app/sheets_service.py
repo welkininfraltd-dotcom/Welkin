@@ -332,7 +332,7 @@ def add_entry(site_id: str, entry: dict, entered_by: str, batch_id: str = "") ->
         next_in_no,                          # A: In No
         entry["entry_date"],                 # B: Date
         entry.get("bill_no", "Nil"),         # C: Bill No.
-        "",                                  # D: V.No
+        entry.get("vehicle_no", ""),          # D: V.No
         entry["party_name"],                 # E: Name of Party
         entry["item_description"],           # F: Particulars
         entry["quantity"],                   # G: Qty
