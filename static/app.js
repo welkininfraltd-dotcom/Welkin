@@ -961,13 +961,13 @@ async function loadAdmin() {
         const itemNames = items.map(x => x.item_description).join(", ");
         const shortItems = itemNames.length > 50 ? itemNames.substring(0, 50) + "..." : itemNames;
 
-        pendingHtml += `<div class="entry-row" style="flex-wrap:wrap;cursor:pointer" onclick="showBatchForApproval('${site.site_id}','${batchKey}')">
+        pendingHtml += `<div class="entry-row" style="flex-wrap:wrap;cursor:pointer" onclick="showBatchForApproval('${site.site_id}','${batchKey}');setTimeout(()=>document.getElementById('admin-content')?.scrollIntoView({behavior:'smooth'}),200)">
           <div class="entry-left" style="flex-basis:100%">
             <div class="item-name">${items.length > 1 ? items.length + ' items: ' : ''}${shortItems}</div>
             <div class="item-meta">₹${Number(total).toLocaleString("en-IN")} · ${e0.party_name} · ${e0.entered_by} · ${site.name} · ${e0.entry_date}</div>
           </div>
           <div style="display:flex;gap:6px;margin-top:6px">
-            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();showBatchForApproval('${site.site_id}','${batchKey}')">📋 View Invoice</button>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();showBatchForApproval('${site.site_id}','${batchKey}');document.getElementById('admin-content').scrollIntoView({behavior:'smooth'})">📋 View Invoice</button>
           </div>
         </div>`;
       }
