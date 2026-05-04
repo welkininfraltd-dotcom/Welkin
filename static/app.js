@@ -1796,7 +1796,6 @@ async function loadReports() {
 function showMaterialReport() {
   const entries = window._reportEntries || [];
   const c = document.getElementById("report-content");
-  // Group by item
   const items = {};
   for (const e of entries) {
     const name = e.item_description || "Unknown";
@@ -1809,15 +1808,46 @@ function showMaterialReport() {
   }
   const sorted = Object.entries(items).sort((a, b) => b[1].amount - a[1].amount);
 
-  let html = '<div class="card"><h3>📦 Material Usage Report</h3><div class="search-box"><input id="mat-search" placeholder="Search material..." oninput="fuzzyFilter(\'.mat-row\',\'mat-search\')"></div>';
-  for (const [name, data] of sorted.slice(0, 50)) {
+  let html = '<div class="card"><h3>📦 Material Usage Report</h3><p style="font-size:.68em;color:#888">Tap any material to see line items</p><div class="search-box"><input id="mat-search" placeholder="Search material..." oninput="fuzzyFilter(\'.mat-row\',\'mat-search\')"></div>';
+  for (const [name, data] of sorted.slice(0, 100)) {
     const avgRate = data.rates.length ? (data.rates.reduce((a,b)=>a+b,0) / data.rates.length).toFixed(0) : 0;
-    html += `<div class="entry-row mat-row" data-search="${name.toLowerCase()}">
+    const safeName = name.replace(/'/g, "\\'");
+    html += `<div class="entry-row mat-row" style="cursor:pointer" onclick="showMaterialLineItems('${safeName}')" data-search="${name.toLowerCase()}">
       <div class="entry-left">
         <div class="item-name">${name}</div>
         <div class="item-meta">${data.count} entries · Avg rate: ₹${avgRate} · Sites: ${[...data.sites].join(", ")}</div>
       </div>
       <div class="entry-right"><div class="amount">₹${Number(data.amount).toLocaleString("en-IN")}</div><div class="date">Qty: ${data.qty}</div></div>
+    </div>`;
+  }
+  html += '</div>';
+  c.innerHTML = html;
+}
+
+function showMaterialLineItems(materialName) {
+  const entries = (window._reportEntries || []).filter(e => e.item_description === materialName);
+  const c = document.getElementById("report-content");
+  const total = entries.reduce((s, e) => s + Number(e.amount), 0);
+  const totalQty = entries.reduce((s, e) => s + Number(e.quantity), 0);
+
+  let html = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="margin:0">📦 ${materialName}</h3>
+      <button class="btn btn-outline btn-sm" onclick="showMaterialReport()">← Back</button>
+    </div>
+    <div class="stat-grid" style="margin-bottom:10px">
+      <div class="stat"><div class="val">${entries.length}</div><div class="lbl">Entries</div></div>
+      <div class="stat"><div class="val">${totalQty}</div><div class="lbl">Total Qty</div></div>
+      <div class="stat" style="grid-column:span 2"><div class="val">₹${Number(total).toLocaleString("en-IN")}</div><div class="lbl">Total Amount</div></div>
+    </div>`;
+
+  for (const e of entries.sort((a, b) => (b.entry_date || "").localeCompare(a.entry_date || ""))) {
+    html += `<div class="entry-row">
+      <div class="entry-left">
+        <div class="item-name">${e.quantity} ${e.unit} × ₹${Number(e.rate).toLocaleString("en-IN")}</div>
+        <div class="item-meta">${e.entry_date} · ${e.party_name} · ${e.site_name || e.site_id} · ${e.entered_by}${e.bill_no && e.bill_no !== 'Nil' ? ' · Bill: ' + e.bill_no : ''}</div>
+      </div>
+      <div class="entry-right"><div class="amount">₹${Number(e.amount).toLocaleString("en-IN")}</div></div>
     </div>`;
   }
   html += '</div>';
