@@ -1936,29 +1936,91 @@ async function showCashRecon() {
   c.innerHTML = '<div class="loader"><div style="font-size:2em;animation:pulse 1s infinite">🏗️</div><div class="loader-text">Loading cash reconciliation...</div></div>';
   try {
     const data = await api("/api/reports/cash-recon");
-    let html = `<div class="card">
-      <h3>💰 Cash Reconciliation</h3>
-      <p style="font-size:.68em;color:#888;margin-bottom:10px">Excludes: HO entries, Raunak entries, Challan entries</p>
-      <div class="stat-grid" style="margin-bottom:12px">
-        <div class="stat"><div class="val" style="color:var(--success)">₹${Number(data.total_in).toLocaleString("en-IN")}</div><div class="lbl">Total Cash In</div></div>
-        <div class="stat"><div class="val" style="color:var(--danger)">₹${Number(data.total_out).toLocaleString("en-IN")}</div><div class="lbl">Total Cash Out</div></div>
-        <div class="stat" style="grid-column:span 2"><div class="val" style="color:${data.total_balance >= 0 ? 'var(--success)' : 'var(--danger)'}">₹${Number(data.total_balance).toLocaleString("en-IN")}</div><div class="lbl">Cash Balance</div></div>
-      </div>`;
 
-    // Per site
-    for (const s of data.sites) {
-      const balColor = s.balance >= 0 ? "var(--success)" : "var(--danger)";
-      html += `<div class="entry-row" style="flex-wrap:wrap">
-        <div class="entry-left" style="flex-basis:100%">
-          <div class="item-name">📍 ${s.site_name}</div>
-          <div class="item-meta">In: ₹${Number(s.cash_in).toLocaleString("en-IN")} (${s.fund_count} releases) · Out: ₹${Number(s.cash_out).toLocaleString("en-IN")} (${s.entry_count} entries) · Excluded: ${s.excluded_count}</div>
-        </div>
-        <div class="entry-right"><div class="amount" style="color:${balColor}">₹${Number(s.balance).toLocaleString("en-IN")}</div><div class="date">Balance</div></div>
-      </div>`;
+    // Also get detailed fund releases and entries
+    const funds = await api("/api/funds");
+    const sites = await api("/api/sites");
+    let allEntries = [];
+    for (const site of sites) {
+      if (site.name && site.name.startsWith("[CLOSED]")) continue;
+      const entries = await api("/api/entries/" + site.site_id);
+      allEntries = allEntries.concat(entries.map(e => ({...e, site_name: site.name})));
     }
 
-    html += `<button class="btn btn-primary" onclick="animatedSubmit(this, emailCashRecon)" style="margin-top:12px">📧 Email Report to raunakjak@gmail.com</button>`;
-    html += '</div>';
+    // Filter out HO/Raunak entries
+    const cashEntries = allEntries.filter(e => {
+      const v = (e.party_name || "").toUpperCase();
+      const pm = e.payment_mode || "";
+      const by = (e.entered_by || "").toLowerCase();
+      if (pm === "HO (Head Office)" || pm === "Challan") return false;
+      if (v.startsWith("HO") || v.includes(" HO ")) return false;
+      if (v.includes("RAUNAK") || by.includes("raunak")) return false;
+      return true;
+    });
+
+    const totalIn = data.total_in;
+    const totalOut = cashEntries.reduce((s, e) => s + Number(e.amount), 0);
+
+    let html = `<div class="card">
+      <h3>💰 Cash Reconciliation (Detailed)</h3>
+      <p style="font-size:.68em;color:#888;margin-bottom:10px">Excludes: HO, Raunak, Challan entries</p>
+      <div class="stat-grid" style="margin-bottom:12px">
+        <div class="stat"><div class="val" style="color:var(--success)">₹${Number(totalIn).toLocaleString("en-IN")}</div><div class="lbl">Total Cash In</div></div>
+        <div class="stat"><div class="val" style="color:var(--danger)">₹${Number(totalOut).toLocaleString("en-IN")}</div><div class="lbl">Total Cash Out</div></div>
+        <div class="stat" style="grid-column:span 2"><div class="val" style="color:${(totalIn-totalOut) >= 0 ? 'var(--success)' : 'var(--danger)'}">₹${Number(totalIn-totalOut).toLocaleString("en-IN")}</div><div class="lbl">Cash Balance</div></div>
+      </div>
+    </div>`;
+
+    // Combine funds (IN) and entries (OUT) into one timeline sorted by date
+    let timeline = [];
+    for (const f of funds) {
+      timeline.push({type: "IN", date: f.date, amount: Number(f.amount), desc: f.remarks || "Fund Release", who: f.engineer_name, site: f.site_id});
+    }
+    for (const e of cashEntries) {
+      timeline.push({type: "OUT", date: e.entry_date, amount: Number(e.amount), desc: e.item_description + " (" + e.party_name + ")", who: e.entered_by, site: e.site_id, bill: e.bill_no});
+    }
+    timeline.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+    // Running balance
+    let runBal = 0;
+    const withBal = [];
+    // Sort ascending for running balance calc
+    const asc = [...timeline].reverse();
+    for (const t of asc) {
+      if (t.type === "IN") runBal += t.amount;
+      else runBal -= t.amount;
+      withBal.push({...t, balance: runBal});
+    }
+    withBal.reverse(); // back to descending
+
+    // Per site breakdown
+    for (const s of data.sites) {
+      if (s.cash_in === 0 && s.cash_out === 0) continue;
+      const balColor = s.balance >= 0 ? "var(--success)" : "var(--danger)";
+      html += `<div class="card">
+        <h3>📍 ${s.site_name} — Balance: <span style="color:${balColor}">₹${Number(s.balance).toLocaleString("en-IN")}</span></h3>
+        <div style="font-size:.72em;color:#888;margin-bottom:8px">In: ₹${Number(s.cash_in).toLocaleString("en-IN")} | Out: ₹${Number(s.cash_out).toLocaleString("en-IN")} | ${s.entry_count} entries | ${s.excluded_count} excluded</div>`;
+
+      // Show line items for this site
+      const siteItems = withBal.filter(t => t.site === s.site_id);
+      for (const t of siteItems.slice(0, 50)) {
+        const isIn = t.type === "IN";
+        html += `<div class="entry-row" style="font-size:.78em">
+          <div class="entry-left">
+            <div style="font-weight:600;color:${isIn ? 'var(--success)' : 'var(--text)'}">${isIn ? '↓ IN' : '↑ OUT'} ${t.desc.length > 45 ? t.desc.substring(0,45)+'...' : t.desc}</div>
+            <div class="item-meta">${t.date} · ${t.who || ''}${t.bill ? ' · Bill: ' + t.bill : ''}</div>
+          </div>
+          <div class="entry-right">
+            <div class="amount" style="color:${isIn ? 'var(--success)' : 'var(--danger)'}">₹${Number(t.amount).toLocaleString("en-IN")}</div>
+            <div class="date">Bal: ₹${Number(t.balance).toLocaleString("en-IN")}</div>
+          </div>
+        </div>`;
+      }
+      if (siteItems.length > 50) html += `<p style="font-size:.72em;color:#999;text-align:center">+${siteItems.length - 50} more entries</p>`;
+      html += '</div>';
+    }
+
+    html += `<button class="btn btn-primary" onclick="animatedSubmit(this, emailCashRecon)" style="margin-top:8px">📧 Email Report to raunakjak@gmail.com</button>`;
     c.innerHTML = html;
   } catch (e) { c.innerHTML = '<div class="card"><p style="color:var(--danger)">' + e.message + '</p></div>'; }
 }
