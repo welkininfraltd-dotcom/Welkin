@@ -1959,7 +1959,7 @@ async function showCashRecon() {
     });
 
     const totalIn = data.total_in;
-    const totalOut = cashEntries.reduce((s, e) => s + Number(e.amount), 0);
+    const totalOut = data.total_out;
 
     let html = `<div class="card">
       <h3>💰 Cash Reconciliation (Detailed)</h3>
