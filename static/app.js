@@ -1761,6 +1761,7 @@ async function loadReports() {
         <button class="btn btn-outline btn-sm" onclick="showDailyReport()">📅 Daily Spending</button>
         <button class="btn btn-outline btn-sm" onclick="showSiteComparison()">📍 Site Comparison</button>
         <button class="btn btn-outline btn-sm" onclick="showPriceAnomalies()">⚠️ Price Anomalies</button>
+        <button class="btn btn-outline btn-sm" onclick="showCashRecon()" style="grid-column:span 2">💰 Cash Reconciliation</button>
       </div>
     </div>
     <div id="report-content"></div>`;
@@ -1928,6 +1929,49 @@ function showPriceAnomalies() {
   }
   html += '</div>';
   c.innerHTML = html;
+}
+
+async function showCashRecon() {
+  const c = document.getElementById("report-content");
+  c.innerHTML = '<div class="loader"><div style="font-size:2em;animation:pulse 1s infinite">🏗️</div><div class="loader-text">Loading cash reconciliation...</div></div>';
+  try {
+    const data = await api("/api/reports/cash-recon");
+    let html = `<div class="card">
+      <h3>💰 Cash Reconciliation</h3>
+      <p style="font-size:.68em;color:#888;margin-bottom:10px">Excludes: HO entries, Raunak entries, Challan entries</p>
+      <div class="stat-grid" style="margin-bottom:12px">
+        <div class="stat"><div class="val" style="color:var(--success)">₹${Number(data.total_in).toLocaleString("en-IN")}</div><div class="lbl">Total Cash In</div></div>
+        <div class="stat"><div class="val" style="color:var(--danger)">₹${Number(data.total_out).toLocaleString("en-IN")}</div><div class="lbl">Total Cash Out</div></div>
+        <div class="stat" style="grid-column:span 2"><div class="val" style="color:${data.total_balance >= 0 ? 'var(--success)' : 'var(--danger)'}">₹${Number(data.total_balance).toLocaleString("en-IN")}</div><div class="lbl">Cash Balance</div></div>
+      </div>`;
+
+    // Per site
+    for (const s of data.sites) {
+      const balColor = s.balance >= 0 ? "var(--success)" : "var(--danger)";
+      html += `<div class="entry-row" style="flex-wrap:wrap">
+        <div class="entry-left" style="flex-basis:100%">
+          <div class="item-name">📍 ${s.site_name}</div>
+          <div class="item-meta">In: ₹${Number(s.cash_in).toLocaleString("en-IN")} (${s.fund_count} releases) · Out: ₹${Number(s.cash_out).toLocaleString("en-IN")} (${s.entry_count} entries) · Excluded: ${s.excluded_count}</div>
+        </div>
+        <div class="entry-right"><div class="amount" style="color:${balColor}">₹${Number(s.balance).toLocaleString("en-IN")}</div><div class="date">Balance</div></div>
+      </div>`;
+    }
+
+    html += `<button class="btn btn-primary" onclick="animatedSubmit(this, emailCashRecon)" style="margin-top:12px">📧 Email Report to raunakjak@gmail.com</button>`;
+    html += '</div>';
+    c.innerHTML = html;
+  } catch (e) { c.innerHTML = '<div class="card"><p style="color:var(--danger)">' + e.message + '</p></div>'; }
+}
+
+async function emailCashRecon() {
+  const result = await api("/api/reports/cash-recon/email", { method: "POST" });
+  if (result.report_html) {
+    // Open report in new window for printing/saving
+    const w = window.open("", "_blank");
+    w.document.write(result.report_html);
+    w.document.close();
+    toast("📧 Report opened! You can print or save as PDF.");
+  }
 }
 
 // ── INIT & AUTO-UPDATE ────────────────────────────────────────────

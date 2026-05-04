@@ -509,6 +509,115 @@ async def get_vendors(site_id: str | None = Query(None), user: dict = Depends(ge
 
 
 # ═══════════════════════════════════════════════════════════════════
+#  CASH RECONCILIATION REPORT
+# ═══════════════════════════════════════════════════════════════════
+
+# Vendors/names to EXCLUDE from cash out (HO entries, owner entries)
+EXCLUDE_VENDORS = {"ho", "raunak"}
+
+
+def _is_excluded_entry(entry: dict) -> bool:
+    """Check if an entry should be excluded from cash reconciliation."""
+    vendor = (entry.get("party_name") or "").upper()
+    pmode = entry.get("payment_mode", "")
+    entered_by = (entry.get("entered_by") or "").lower()
+    # Exclude HO payment mode
+    if pmode in ("HO (Head Office)", "Challan"):
+        return True
+    # Exclude if vendor starts with HO or contains HO
+    if vendor.startswith("HO ") or vendor.startswith("HO") or " HO " in vendor:
+        return True
+    # Exclude if vendor or entered_by contains excluded names
+    for name in EXCLUDE_VENDORS:
+        if name in vendor.lower() or name in entered_by:
+            return True
+    return False
+
+
+@app.get("/api/reports/cash-recon")
+async def cash_reconciliation(
+    site_id: str | None = Query(None),
+    admin: dict = Depends(require_admin),
+):
+    """Cash reconciliation: fund in vs cash out per site, excluding HO/Raunak entries."""
+    sites = sheets_service.list_sites()
+    if site_id:
+        sites = [s for s in sites if str(s.get("site_id")) == site_id]
+
+    result = {"sites": [], "total_in": 0, "total_out": 0, "total_balance": 0}
+
+    for site in sites:
+        sid = str(site.get("site_id", ""))
+        if site.get("name", "").startswith("[CLOSED]"):
+            continue
+
+        # Cash In = fund releases for this site
+        funds = sheets_service.list_funds(site_id=sid)
+        cash_in = sum(float(f.get("amount", 0)) for f in funds)
+
+        # Cash Out = entries excluding HO/Raunak
+        entries = sheets_service.list_entries(sid)
+        cash_entries = [e for e in entries if not _is_excluded_entry(e)]
+        cash_out = sum(float(e.get("amount", 0)) for e in cash_entries)
+
+        balance = cash_in - cash_out
+        result["sites"].append({
+            "site_id": sid,
+            "site_name": site.get("name", sid),
+            "cash_in": cash_in,
+            "cash_out": cash_out,
+            "balance": balance,
+            "fund_count": len(funds),
+            "entry_count": len(cash_entries),
+            "excluded_count": len(entries) - len(cash_entries),
+        })
+        result["total_in"] += cash_in
+        result["total_out"] += cash_out
+
+    result["total_balance"] = result["total_in"] - result["total_out"]
+    return result
+
+
+@app.post("/api/reports/cash-recon/email")
+async def email_cash_recon(admin: dict = Depends(require_admin)):
+    """Email cash reconciliation report to admin."""
+    import smtplib
+    from email.mime.text import MIMEText
+
+    # Build report
+    recon = await cash_reconciliation(site_id=None, admin=admin)
+
+    # Build HTML email
+    html = "<h2>Cash Reconciliation Report — Welkin Builders Infrastructure Ltd</h2>"
+    html += f"<p>Generated: {datetime.now().strftime('%d %b %Y %I:%M %p')}</p>"
+    html += f"<h3>Overall: Cash In ₹{recon['total_in']:,.0f} | Cash Out ₹{recon['total_out']:,.0f} | Balance ₹{recon['total_balance']:,.0f}</h3>"
+    html += "<table border='1' cellpadding='8' cellspacing='0' style='border-collapse:collapse'>"
+    html += "<tr style='background:#0b3d5c;color:white'><th>Site</th><th>Cash In</th><th>Cash Out</th><th>Balance</th><th>Funds</th><th>Entries</th><th>Excluded</th></tr>"
+    for s in recon["sites"]:
+        color = "green" if s["balance"] >= 0 else "red"
+        html += f"<tr><td>{s['site_name']}</td><td>₹{s['cash_in']:,.0f}</td><td>₹{s['cash_out']:,.0f}</td>"
+        html += f"<td style='color:{color};font-weight:bold'>₹{s['balance']:,.0f}</td>"
+        html += f"<td>{s['fund_count']}</td><td>{s['entry_count']}</td><td>{s['excluded_count']}</td></tr>"
+    html += "</table>"
+    html += "<p style='color:gray;font-size:12px'>Excluded: HO entries, Raunak entries, Challan entries</p>"
+
+    # Send email
+    try:
+        msg = MIMEText(html, "html")
+        msg["Subject"] = f"Cash Recon Report — Welkin Builders — {datetime.now().strftime('%d %b %Y')}"
+        msg["From"] = "noreply@welkinbuilders.com"
+        msg["To"] = "raunakjak@gmail.com"
+
+        # Use Gmail SMTP (you'll need app password)
+        # For now, return the report data — email setup needs SMTP credentials
+        return {"success": True, "message": "Report generated. Email requires SMTP setup.", "report_html": html}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+from datetime import datetime as _dt  # noqa: already imported above
+
+# ═══════════════════════════════════════════════════════════════════
 #  ITEM MASTER
 # ═══════════════════════════════════════════════════════════════════
 
