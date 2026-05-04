@@ -580,38 +580,51 @@ async def cash_reconciliation(
 
 @app.post("/api/reports/cash-recon/email")
 async def email_cash_recon(admin: dict = Depends(require_admin)):
-    """Email cash reconciliation report to admin."""
+    """Email cash reconciliation report via Gmail SMTP."""
     import smtplib
     from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
 
-    # Build report
     recon = await cash_reconciliation(site_id=None, admin=admin)
 
-    # Build HTML email
-    html = "<h2>Cash Reconciliation Report — Welkin Builders Infrastructure Ltd</h2>"
-    html += f"<p>Generated: {datetime.now().strftime('%d %b %Y %I:%M %p')}</p>"
-    html += f"<h3>Overall: Cash In ₹{recon['total_in']:,.0f} | Cash Out ₹{recon['total_out']:,.0f} | Balance ₹{recon['total_balance']:,.0f}</h3>"
-    html += "<table border='1' cellpadding='8' cellspacing='0' style='border-collapse:collapse'>"
+    html = "<html><body style='font-family:Arial,sans-serif'>"
+    html += "<h2 style='color:#0b3d5c'>Cash Reconciliation Report</h2>"
+    html += "<h3>Welkin Builders Infrastructure Ltd</h3>"
+    html += f"<p>Generated: {datetime.now(timezone.utc).strftime('%d %b %Y %I:%M %p')} UTC</p>"
+    bal_color = "green" if recon["total_balance"] >= 0 else "red"
+    html += f"<h3>Cash In: ₹{recon['total_in']:,.0f} | Cash Out: ₹{recon['total_out']:,.0f} | <span style='color:{bal_color}'>Balance: ₹{recon['total_balance']:,.0f}</span></h3>"
+    html += "<table border='1' cellpadding='8' cellspacing='0' style='border-collapse:collapse;width:100%'>"
     html += "<tr style='background:#0b3d5c;color:white'><th>Site</th><th>Cash In</th><th>Cash Out</th><th>Balance</th><th>Funds</th><th>Entries</th><th>Excluded</th></tr>"
     for s in recon["sites"]:
         color = "green" if s["balance"] >= 0 else "red"
-        html += f"<tr><td>{s['site_name']}</td><td>₹{s['cash_in']:,.0f}</td><td>₹{s['cash_out']:,.0f}</td>"
-        html += f"<td style='color:{color};font-weight:bold'>₹{s['balance']:,.0f}</td>"
-        html += f"<td>{s['fund_count']}</td><td>{s['entry_count']}</td><td>{s['excluded_count']}</td></tr>"
+        html += f"<tr><td>{s['site_name']}</td><td style='text-align:right'>₹{s['cash_in']:,.0f}</td><td style='text-align:right'>₹{s['cash_out']:,.0f}</td>"
+        html += f"<td style='color:{color};font-weight:bold;text-align:right'>₹{s['balance']:,.0f}</td>"
+        html += f"<td style='text-align:center'>{s['fund_count']}</td><td style='text-align:center'>{s['entry_count']}</td><td style='text-align:center'>{s['excluded_count']}</td></tr>"
     html += "</table>"
-    html += "<p style='color:gray;font-size:12px'>Excluded: HO entries, Raunak entries, Challan entries</p>"
+    html += "<p style='color:gray;font-size:11px'>Excluded: HO, Raunak, Challan entries</p></body></html>"
 
-    # Send email
+    gmail_user = os.environ.get("GMAIL_USER", "welkininfraltd@gmail.com")
+    gmail_pass = os.environ.get("GMAIL_APP_PASSWORD", "")
+    to_email = "raunakjak@gmail.com"
+
+    if not gmail_pass:
+        return {"success": False, "error": "GMAIL_APP_PASSWORD not set in environment variables"}
+
     try:
-        msg = MIMEText(html, "html")
-        msg["Subject"] = f"Cash Recon Report — Welkin Builders — {datetime.now().strftime('%d %b %Y')}"
-        msg["From"] = "noreply@welkinbuilders.com"
-        msg["To"] = "raunakjak@gmail.com"
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Cash Recon — Welkin Builders — {datetime.now(timezone.utc).strftime('%d %b %Y')}"
+        msg["From"] = gmail_user
+        msg["To"] = to_email
+        msg.attach(MIMEText(html, "html"))
 
-        # Use Gmail SMTP (you'll need app password)
-        # For now, return the report data — email setup needs SMTP credentials
-        return {"success": True, "message": "Report generated. Email requires SMTP setup.", "report_html": html}
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(gmail_user, gmail_pass)
+            server.sendmail(gmail_user, to_email, msg.as_string())
+
+        logger.info("Cash recon email sent to %s", to_email)
+        return {"success": True, "message": f"Report emailed to {to_email}"}
     except Exception as e:
+        logger.error("Email failed: %s", e)
         return {"success": False, "error": str(e)}
 
 
