@@ -1445,6 +1445,7 @@ async function uploadBankStatement() {
       <div style="background:#e8f5e9;padding:12px;border-radius:8px;border:1px solid #4caf50">
         <h4 style="color:#2e7d32;margin:0 0 8px">✅ Statement Processed Successfully</h4>
         <div style="font-size:.9em">
+          <div><strong>Bank:</strong> ${data.bank_name || 'Unknown'}</div>
           <div><strong>Period:</strong> ${data.period}</div>
           <div><strong>Transactions:</strong> ${data.transactions}</div>
           <div><strong>Total Debit:</strong> ₹${Number(data.total_debit).toLocaleString('en-IN', {minimumFractionDigits:2})}</div>

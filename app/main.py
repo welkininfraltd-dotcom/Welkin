@@ -672,7 +672,37 @@ async def add_item(
 #  BANK STATEMENT PDF → Google Sheet (only user 9754400444)
 # ═══════════════════════════════════════════════════════════════════
 
-BANK_STATEMENT_SHEET_ID = "1psPIt3KwdrzFKQgUvhTOu6h29btGgZOT45Esp9TPhL4"
+# Map bank names to their Google Sheet IDs
+# Indian Bank → existing "Raunak" sheet; other banks get new sheets created on demand
+BANK_SHEET_REGISTRY = {
+    "INDIAN BANK": "1psPIt3KwdrzFKQgUvhTOu6h29btGgZOT45Esp9TPhL4",
+}
+
+
+def _get_or_create_bank_sheet(client, bank_name: str, account_number: str) -> tuple[str, str]:
+    """Get existing sheet ID for a bank, or create a new Google Sheet for it.
+    Returns (sheet_id, sheet_name)."""
+    # Normalize bank name
+    bank_key = bank_name.strip().upper()
+
+    # Check if we already have a sheet for this bank
+    if bank_key in BANK_SHEET_REGISTRY:
+        return BANK_SHEET_REGISTRY[bank_key], bank_key
+
+    # Create a new Google Sheet for this bank
+    sheet_name = f"{bank_name} - {account_number}"
+    new_sheet = client.create(sheet_name)
+
+    # Share with the user's email (so they can access it)
+    new_sheet.share("welkinbuider@gmail.com", perm_type="user", role="writer")
+    new_sheet.share("raunakjak@gmail.com", perm_type="user", role="writer")
+
+    new_id = new_sheet.id
+    # Cache it for future uploads in this session
+    BANK_SHEET_REGISTRY[bank_key] = new_id
+    logger.info("Created new Google Sheet for bank '%s': %s (ID: %s)", bank_name, sheet_name, new_id)
+
+    return new_id, sheet_name
 
 
 @app.post("/api/bank-statement/upload")
@@ -680,7 +710,8 @@ async def upload_bank_statement(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user),
 ):
-    """Only user 9754400444 can upload bank statement PDF → parsed and pushed to Google Sheet."""
+    """Only user 9754400444 can upload bank statement PDF → parsed and pushed to Google Sheet.
+    Same bank → same sheet (new tab per period). Different bank → new sheet created."""
     if str(user.get("sub")) != "9754400444":
         raise HTTPException(status_code=403, detail="Only authorized user can upload bank statements")
 
@@ -701,11 +732,14 @@ async def upload_bank_statement(
         if not transactions:
             raise HTTPException(status_code=422, detail="No transactions found in the PDF")
 
-        # Push to Google Sheet
+        # Determine which Google Sheet to use based on bank name
         client = _get_client()
-        sp = client.open_by_key(BANK_STATEMENT_SHEET_ID)
+        sheet_id, sheet_display_name = _get_or_create_bank_sheet(
+            client, metadata.bank_name, metadata.account_number
+        )
+        sp = client.open_by_key(sheet_id)
 
-        # Use sheet name based on period
+        # Use sheet tab name based on period
         sheet_title = f"Statement {metadata.period_from} to {metadata.period_to}".replace("/", "-")
         try:
             ws = sp.worksheet(sheet_title)
@@ -763,16 +797,17 @@ async def upload_bank_statement(
 
         ws.update(range_name="A1", values=all_rows, value_input_option="USER_ENTERED")
 
-        logger.info("Bank statement uploaded by %s: %d transactions, sheet=%s",
-                    user["name"], len(transactions), sheet_title)
+        logger.info("Bank statement uploaded by %s: %d txns, bank=%s, sheet=%s, tab=%s",
+                    user["name"], len(transactions), metadata.bank_name, sheet_id, sheet_title)
 
         return {
             "success": True,
+            "bank_name": metadata.bank_name,
             "transactions": len(transactions),
             "total_debit": total_debit,
             "total_credit": total_credit,
             "period": f"{metadata.period_from} to {metadata.period_to}",
-            "sheet_url": f"https://docs.google.com/spreadsheets/d/{BANK_STATEMENT_SHEET_ID}",
+            "sheet_url": f"https://docs.google.com/spreadsheets/d/{sheet_id}",
             "sheet_tab": sheet_title,
         }
 
