@@ -669,6 +669,123 @@ async def add_item(
 
 
 # ═══════════════════════════════════════════════════════════════════
+#  BANK STATEMENT PDF → Google Sheet (only user 9754400444)
+# ═══════════════════════════════════════════════════════════════════
+
+BANK_STATEMENT_SHEET_ID = "1psPIt3KwdrzFKQgUvhTOu6h29btGgZOT45Esp9TPhL4"
+
+
+@app.post("/api/bank-statement/upload")
+async def upload_bank_statement(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    """Only user 9754400444 can upload bank statement PDF → parsed and pushed to Google Sheet."""
+    if str(user.get("sub")) != "9754400444":
+        raise HTTPException(status_code=403, detail="Only authorized user can upload bank statements")
+
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+
+    # Save uploaded file temporarily
+    tmp_path = UPLOAD_DIR / f"bank_stmt_{uuid.uuid4().hex}.pdf"
+    content = await file.read()
+    tmp_path.write_bytes(content)
+
+    try:
+        from bank_statement_parser import extract_transactions_from_pdf
+        from app.sheets_service import _get_client
+
+        # Parse the PDF
+        metadata, transactions = extract_transactions_from_pdf(str(tmp_path))
+        if not transactions:
+            raise HTTPException(status_code=422, detail="No transactions found in the PDF")
+
+        # Push to Google Sheet
+        client = _get_client()
+        sp = client.open_by_key(BANK_STATEMENT_SHEET_ID)
+
+        # Use sheet name based on period
+        sheet_title = f"Statement {metadata.period_from} to {metadata.period_to}".replace("/", "-")
+        try:
+            ws = sp.worksheet(sheet_title)
+            ws.clear()
+        except Exception:
+            try:
+                ws = sp.add_worksheet(title=sheet_title, rows=len(transactions) + 30, cols=8)
+            except Exception:
+                ws = sp.sheet1
+                ws.clear()
+
+        # Build rows
+        all_rows = []
+        all_rows.append([""] * 8)
+        all_rows.append(["", "", "", f"{metadata.bank_name}  ", "", "", "", ""])
+        all_rows.append(["", "", "", metadata.branch, "", "", "", ""])
+        all_rows.append(["", "", "", f"IFSC CODE :{metadata.ifsc}", "", "", "", ""])
+        all_rows.append(["", "", "", metadata.address, "", "", "", ""])
+        all_rows.append(["", "", "", f"Branch Code :{metadata.branch_code}", "", "", "", ""])
+        all_rows.append(["", "", "", f"Account Number : {metadata.account_number}", "", "", "", ""])
+        all_rows.append(["", "", "", f"Product type :  {metadata.product_type}", "", "", "", ""])
+        all_rows.append([metadata.account_holder, "", "", "", "", "", "", ""])
+        all_rows.append(["705 PUKHRAJ  CORPORATE", "", "", "", "", "", "", ""])
+        all_rows.append(["IN FRONT OF  NAVLAKHA BUS STAND", "", "", "", "", "", "", ""])
+        all_rows.append(["INDORE", "", "", "", "", "", "", ""])
+        all_rows.append(["MADHYA PRADESH - 452001", "", "", "", "", "", "", ""])
+        all_rows.append([f"Email : {metadata.email}", "", "", "", "", "", "", ""])
+        all_rows.append([f"Statement Date :{metadata.statement_date}", "", "", "", "", "", "", ""])
+        all_rows.append([f"Cleared Balance :{metadata.cleared_balance}", "", "", "", "", "", "", ""])
+        all_rows.append([f"Uncleared Amount :{metadata.uncleared_amount}", "", "", "", "", "", "", ""])
+        all_rows.append([f"Drawing Power :{metadata.drawing_power}", "", "", "", "", "", "", ""])
+        all_rows.append([f"Interest Rate : {metadata.interest_rate}", "", "", "", "", "", "", ""])
+        all_rows.append([f"Statement of Account from {metadata.period_from} to {metadata.period_to}",
+                         "", "", "", "", "", "", ""])
+        all_rows.append([""] * 8)
+        all_rows.append(["Value Date", "Post Date", "Remitter Branch", "Description",
+                         "Chq No/REF No/UTR No", "Debit Amount", "Credit Amount", "Balance"])
+
+        total_debit = 0.0
+        total_credit = 0.0
+        for txn in transactions:
+            dr_str = f"{txn.debit:.2f}" if txn.debit is not None else " "
+            cr_str = f"{txn.credit:.2f}" if txn.credit is not None else " "
+            if txn.debit:
+                total_debit += txn.debit
+            if txn.credit:
+                total_credit += txn.credit
+            all_rows.append([
+                txn.value_date, txn.post_date, txn.remitter_branch,
+                txn.description, txn.cheque_ref or " ", dr_str, cr_str, txn.balance,
+            ])
+
+        all_rows.append(["Total", " ", " ", "", " ", f"{total_debit:,.2f}", f"{total_credit:,.2f}", " "])
+        all_rows.append(["END OF STATEMENT - from Internet Banking", "", "", "", "", "", "", ""])
+
+        ws.update(range_name="A1", values=all_rows, value_input_option="USER_ENTERED")
+
+        logger.info("Bank statement uploaded by %s: %d transactions, sheet=%s",
+                    user["name"], len(transactions), sheet_title)
+
+        return {
+            "success": True,
+            "transactions": len(transactions),
+            "total_debit": total_debit,
+            "total_credit": total_credit,
+            "period": f"{metadata.period_from} to {metadata.period_to}",
+            "sheet_url": f"https://docs.google.com/spreadsheets/d/{BANK_STATEMENT_SHEET_ID}",
+            "sheet_tab": sheet_title,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Bank statement parse error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+# ═══════════════════════════════════════════════════════════════════
 #  HEALTH CHECK & FRONTEND
 # ═══════════════════════════════════════════════════════════════════
 

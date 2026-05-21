@@ -894,6 +894,7 @@ async function loadSummary() {
 async function loadAdmin() {
   const s = document.getElementById("screen-admin");
   if (!s) return;
+  const isBankUser = USER && USER.mobile === "9754400444";
   let html = `
     <div class="card">
       <h3>👑 Admin Panel — Welkin Builders Infrastructure Ltd</h3>
@@ -904,6 +905,7 @@ async function loadAdmin() {
         <button class="btn btn-outline btn-sm admin-action" onclick="adminAction(this,'showFundRecon')">📊 Fund Recon</button>
         <button class="btn btn-outline btn-sm admin-action" onclick="adminAction(this,'detectNewSheets')">📄 Detect Sheets</button>
         <button class="btn btn-outline btn-sm admin-action" onclick="adminAction(this,'doRefresh')">🔄 Refresh</button>
+        ${isBankUser ? '<button class="btn btn-outline btn-sm admin-action" onclick="adminAction(this,\'showBankStatement\')">🏦 Bank Statement</button>' : ''}
       </div>
     </div>
     <div id="admin-content"></div>`;
@@ -1385,6 +1387,80 @@ function showEditSite(siteId, name, location) {
       }
     </div>
   </div>`;
+}
+
+// ── Bank Statement Upload (only user 9754400444) ──────────────────
+function showBankStatement() {
+  const c = document.getElementById("admin-content");
+  c.innerHTML = `
+    <div class="card">
+      <h3>🏦 Upload Bank Statement PDF</h3>
+      <p style="color:#666;font-size:.85em">Upload Indian Bank statement PDF. It will be parsed and pushed to the Raunak Google Sheet automatically.</p>
+      <div class="fg">
+        <label>Select PDF File</label>
+        <input type="file" id="bank-pdf-file" accept=".pdf" style="padding:8px;border:1px dashed #ccc;border-radius:8px;width:100%">
+      </div>
+      <button class="btn btn-primary" onclick="uploadBankStatement()" id="btn-upload-stmt">📤 Upload & Process</button>
+      <div id="bank-stmt-result" style="margin-top:12px"></div>
+    </div>`;
+}
+
+async function uploadBankStatement() {
+  const fileInput = document.getElementById("bank-pdf-file");
+  const resultDiv = document.getElementById("bank-stmt-result");
+  const btn = document.getElementById("btn-upload-stmt");
+
+  if (!fileInput.files || !fileInput.files[0]) {
+    toast("Please select a PDF file");
+    return;
+  }
+
+  const file = fileInput.files[0];
+  if (!file.name.toLowerCase().endsWith(".pdf")) {
+    toast("Only PDF files are accepted");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "⏳ Processing...";
+  resultDiv.innerHTML = '<div class="loader"><div style="font-size:1.5em;animation:pulse 1s infinite">🏦</div><div class="loader-text">Parsing bank statement...</div></div>';
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const token = localStorage.getItem("token");
+    const resp = await fetch("/api/bank-statement/upload", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token },
+      body: formData,
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) {
+      throw new Error(data.detail || "Upload failed");
+    }
+
+    resultDiv.innerHTML = `
+      <div style="background:#e8f5e9;padding:12px;border-radius:8px;border:1px solid #4caf50">
+        <h4 style="color:#2e7d32;margin:0 0 8px">✅ Statement Processed Successfully</h4>
+        <div style="font-size:.9em">
+          <div><strong>Period:</strong> ${data.period}</div>
+          <div><strong>Transactions:</strong> ${data.transactions}</div>
+          <div><strong>Total Debit:</strong> ₹${Number(data.total_debit).toLocaleString('en-IN', {minimumFractionDigits:2})}</div>
+          <div><strong>Total Credit:</strong> ₹${Number(data.total_credit).toLocaleString('en-IN', {minimumFractionDigits:2})}</div>
+          <div><strong>Sheet Tab:</strong> ${data.sheet_tab}</div>
+          <a href="${data.sheet_url}" target="_blank" style="display:inline-block;margin-top:8px;color:#1565c0">📊 Open Google Sheet →</a>
+        </div>
+      </div>`;
+    toast("✅ Bank statement processed!");
+  } catch (err) {
+    resultDiv.innerHTML = `<div style="background:#ffebee;padding:12px;border-radius:8px;border:1px solid #f44336;color:#c62828">❌ ${err.message}</div>`;
+    toast("❌ " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "📤 Upload & Process";
+  }
 }
 
 // ── Create User Modal ─────────────────────────────────────────────
